@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "scale": "nearest-neighbor",
+  "fallback": "bowl-pot",
+  "sprites": [
+    { "name": "bowl", "width": 32, "height": 32, "file": "bowl.png" },
+    { "name": "pot", "width": 32, "height": 32, "file": "pot.png" },
+    { "name": "knife", "width": 24, "height": 24, "file": "knife.png" },
+    { "name": "spoon", "width": 24, "height": 24, "file": "spoon.png" },
+    { "name": "tomato", "width": 16, "height": 16, "file": "tomato.png" },
+    { "name": "onion", "width": 16, "height": 16, "file": "onion.png" }
+  ]
+}
