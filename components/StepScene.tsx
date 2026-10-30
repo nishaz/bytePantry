@@ -1,69 +1,55 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
 
+import { FlatImage } from './FlatImage';
+import { KitchenScene } from './KitchenScene';
 import { getMotionConfig } from '../lib/stepMotion';
 import type { Step } from '../types/recipe';
 
 interface StepSceneProps {
   step: Step;
+  variant?: 'card' | 'fullscreen';
+  isNight?: boolean;
+  recipeIngredients?: string[];
 }
 
-const INGREDIENT_COLORS = ['#ef4444', '#22c55e', '#eab308', '#a855f7', '#f97316'];
-const TOOL_COLORS = ['#64748b', '#475569', '#334155'];
-
-function hashLabel(label: string): number {
-  let hash = 0;
-  for (let i = 0; i < label.length; i += 1) {
-    hash = (hash + label.charCodeAt(i) * (i + 1)) % 997;
-  }
-  return hash;
-}
-
-function colorForLabel(label: string, palette: string[]): string {
-  if (!label.trim()) {
-    return palette[0];
-  }
-  return palette[hashLabel(label.toLowerCase()) % palette.length];
-}
-
-function PlaceholderSprite({
+function FlatSprite({
   label,
-  color,
-  size,
+  fallback,
+  targetSize,
   style,
 }: {
   label: string;
-  color: string;
-  size: number;
+  fallback: 'bowl' | 'cutting-board';
+  targetSize: number;
   style?: object;
 }) {
   return (
-    <Animated.View
-      style={[
-        styles.sprite,
-        {
-          backgroundColor: color,
-          height: size,
-          width: size,
-        },
-        style,
-      ]}
-    >
-      <Text style={styles.spriteLabel} numberOfLines={1}>
-        {label.trim() || '•'}
-      </Text>
+    <Animated.View accessibilityLabel={label} style={style}>
+      <FlatImage label={label} fallback={fallback} size={targetSize} />
     </Animated.View>
   );
 }
 
-export function StepScene({ step }: StepSceneProps) {
+export function StepScene({
+  step,
+  variant = 'card',
+  isNight = true,
+  recipeIngredients = [],
+}: StepSceneProps) {
+  if (variant === 'fullscreen') {
+    return (
+      <KitchenScene step={step} isNight={isNight} recipeIngredients={recipeIngredients} />
+    );
+  }
+
   const progress = useRef(new Animated.Value(0)).current;
   const motion = getMotionConfig(step.action);
 
   const ingredientLabel = step.ingredient.trim() || 'bowl';
-  const toolLabel = step.tool.trim() || 'pot';
-  const ingredientColor = colorForLabel(ingredientLabel, INGREDIENT_COLORS);
-  const toolColor = colorForLabel(toolLabel, TOOL_COLORS);
+  const toolLabel = step.tool.trim() || 'cutting-board';
+
+  const useNativeDriver = Platform.OS !== 'web';
 
   useEffect(() => {
     progress.setValue(0);
@@ -73,19 +59,19 @@ export function StepScene({ step }: StepSceneProps) {
           toValue: 1,
           duration: motion.duration,
           easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
+          useNativeDriver,
         }),
         Animated.timing(progress, {
           toValue: 0,
           duration: motion.duration,
           easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
+          useNativeDriver,
         }),
       ]),
     );
     animation.start();
     return () => animation.stop();
-  }, [motion.duration, progress, step.action]);
+  }, [motion.duration, progress, step.action, useNativeDriver]);
 
   const toolTranslateY =
     motion.toolBob !== undefined
@@ -137,15 +123,19 @@ export function StepScene({ step }: StepSceneProps) {
         })
       : 0;
 
+  const ingredientSize = 48;
+  const toolSize = 40;
+
   return (
     <View style={styles.scene} accessibilityLabel={`Step animation: ${step.action}`}>
       <View style={styles.counter} />
       <View style={styles.stove} />
+
       <View style={styles.workArea}>
-        <PlaceholderSprite
+        <FlatSprite
           label={ingredientLabel}
-          color={ingredientColor}
-          size={48}
+          fallback="bowl"
+          targetSize={ingredientSize}
           style={{
             transform: [
               { translateX: ingredientTranslateX },
@@ -154,16 +144,17 @@ export function StepScene({ step }: StepSceneProps) {
             ],
           }}
         />
-        <PlaceholderSprite
+        <FlatSprite
           label={toolLabel}
-          color={toolColor}
-          size={40}
+          fallback="cutting-board"
+          targetSize={toolSize}
           style={{
             marginLeft: 24,
             transform: [{ translateY: toolTranslateY }, { rotate: toolRotate }],
           }}
         />
       </View>
+
       <Text style={styles.actionLabel}>{step.action}</Text>
     </View>
   );
@@ -199,19 +190,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   sprite: {
-    alignItems: 'center',
     borderColor: '#1c1917',
     borderRadius: 4,
     borderWidth: 2,
-    justifyContent: 'center',
-  },
-  spriteLabel: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '700',
-    paddingHorizontal: 2,
-    textAlign: 'center',
-    textTransform: 'uppercase',
   },
   stove: {
     backgroundColor: '#78716c',

@@ -1,4 +1,4 @@
-export type Action = 'chop' | 'stir' | 'bake' | 'pour' | 'fry' | 'mix';
+export type Action = 'chop' | 'stir' | 'bake' | 'pour' | 'fry' | 'mix' | 'blend';
 
 export interface Step {
   text: string;

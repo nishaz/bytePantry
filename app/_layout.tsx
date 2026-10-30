@@ -1,10 +1,29 @@
+import {
+  Nunito_400Regular,
+  Nunito_600SemiBold,
+  Nunito_700Bold,
+  useFonts as useNunito,
+} from '@expo-google-fonts/nunito';
+import { useFonts as useLocalFonts } from 'expo-font';
+import 'react-native-reanimated';
 import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { initDb } from '../lib/db';
+import { paper } from '../lib/theme';
 
 export default function RootLayout() {
+  const [nunitoLoaded] = useNunito({
+    Nunito_400Regular,
+    Nunito_600SemiBold,
+    Nunito_700Bold,
+  });
+  const [displayLoaded] = useLocalFonts({
+    Gluten_800ExtraBold: require('../assets/fonts/Gluten-ExtraBold.ttf'),
+  });
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -16,34 +35,35 @@ export default function RootLayout() {
       });
   }, []);
 
-  if (!ready) {
+  if (!nunitoLoaded || !displayLoaded || !ready) {
     return (
       <View style={styles.loading}>
-        <ActivityIndicator size="large" color="#ea580c" />
+        <ActivityIndicator size="large" color={paper.red} />
       </View>
     );
   }
 
   return (
-    <Stack
-      screenOptions={{
-        headerStyle: { backgroundColor: '#fff7ed' },
-        headerTintColor: '#431407',
-        headerTitleStyle: { fontWeight: '700' },
-        contentStyle: { backgroundColor: '#fffbeb' },
-      }}
-    >
-      <Stack.Screen name="index" options={{ title: 'Pixel Pantry' }} />
-      <Stack.Screen name="add-recipe" options={{ title: 'Add Recipe' }} />
-      <Stack.Screen name="recipe/[id]" options={{ title: 'Recipe' }} />
-    </Stack>
+    <SafeAreaProvider>
+      <StatusBar style="dark" />
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: paper.kraft } }}>
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen
+          name="recipe/[id]"
+          options={{
+            presentation: 'fullScreenModal',
+            animation: 'slide_from_bottom',
+          }}
+        />
+      </Stack>
+    </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
   loading: {
     alignItems: 'center',
-    backgroundColor: '#fffbeb',
+    backgroundColor: paper.kraft,
     flex: 1,
     justifyContent: 'center',
   },

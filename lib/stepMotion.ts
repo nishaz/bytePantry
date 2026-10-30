@@ -16,12 +16,12 @@ const MOTIONS: Record<Action, StepMotionConfig> = {
   chop: {
     action: 'chop',
     duration: 450,
-    toolBob: 14,
+    toolBob: 3,
   },
   stir: {
     action: 'stir',
     duration: 600,
-    toolRotate: [-18, 18],
+    toolRotate: [-14, 14],
   },
   bake: {
     action: 'bake',
@@ -44,6 +44,11 @@ const MOTIONS: Record<Action, StepMotionConfig> = {
     duration: 700,
     toolBob: 6,
     ingredientBob: 6,
+  },
+  blend: {
+    action: 'blend',
+    duration: 300,
+    toolRotate: [0, 90],
   },
 };
 

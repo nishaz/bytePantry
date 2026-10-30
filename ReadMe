@@ -1,1 +1,8 @@
-blahblahblah
+# Pixel Pantry
+
+Flat icons live in `assets/flat/` (SVG + PNG). After editing SVGs, run `npm run icons:generate` to refresh `components/icons/`. Register new files in `lib/flatRegistry.tsx` and add name aliases in `lib/flatAssets.ts` if needed. Cook animation timing/layout: `components/cook/sceneLayout.ts`.
+
+```bash
+npm install
+npx expo start --clear
+```
