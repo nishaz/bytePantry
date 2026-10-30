@@ -1,103 +1,51 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import Animated, { FadeIn, FadeInRight, ZoomIn } from 'react-native-reanimated';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeIn, FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Celebration, ConfettiBurst, XpPop } from '../../components/cook/paper/Celebration';
-import { PaperScene } from '../../components/cook/paper/PaperScenes';
+import { DishArt, dishColor, dishKindFor } from '../../components/paper/DishArt';
 import { IngredientArt } from '../../components/paper/IngredientArt';
+import { Bob, dealIn } from '../../components/paper/Motion';
 import { PaperBackground } from '../../components/paper/PaperBackground';
 import { PaperButton } from '../../components/paper/PaperButton';
 import { PaperCard } from '../../components/paper/PaperCard';
-import { BackIcon, ClockIcon } from '../../components/paper/UiIcons';
-import { getRecipe } from '../../lib/db';
-import { awardXp, getProfile, XP_PER_STEP, XP_RECIPE_BONUS } from '../../lib/profile';
-import { listStepIngredients } from '../../lib/stepIngredients';
-import { getPaperSceneKind, stepTimerMinutes } from '../../lib/stepSceneLayout';
-import { cutCorners, fonts, paper } from '../../lib/theme';
+import { BackIcon, CheckIcon, PencilIcon, TrashIcon } from '../../components/paper/UiIcons';
+import { deleteRecipe, getRecipe } from '../../lib/db';
+import { listFridgeItems } from '../../lib/fridgeDb';
+import { matchRecipe } from '../../lib/pantryMatch';
+import { XP_PER_STEP, XP_RECIPE_BONUS } from '../../lib/profile';
+import { getPaperSceneKind } from '../../lib/stepSceneLayout';
+import { cutCorners, estimateRecipeMinutes, fonts, formatSource, paper } from '../../lib/theme';
+import type { FridgeItem } from '../../types/fridge';
 import type { Recipe } from '../../types/recipe';
 
-function formatClock(totalSeconds: number): string {
-  const m = Math.floor(totalSeconds / 60);
-  const s = totalSeconds % 60;
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
+const SCENE_LABEL: Record<string, { label: string; color: string }> = {
+  board: { label: 'Chop', color: paper.brown },
+  pan: { label: 'Fry', color: paper.ink },
+  pot: { label: 'Stir', color: paper.red },
+  oven: { label: 'Bake', color: paper.orange },
+  blender: { label: 'Blend', color: paper.purple },
+  bowl: { label: 'Mix', color: paper.blue },
+};
 
-/** Countdown for steps that mention a time. Tap to start / pause. */
-function StepTimer({ minutes }: { minutes: number }) {
-  const total = Math.round(minutes * 60);
-  const [left, setLeft] = useState(total);
-  const [running, setRunning] = useState(false);
-
-  useEffect(() => {
-    setLeft(total);
-    setRunning(false);
-  }, [total]);
-
-  useEffect(() => {
-    if (!running) return undefined;
-    const id = setInterval(() => setLeft((s) => Math.max(0, s - 1)), 1000);
-    return () => clearInterval(id);
-  }, [running]);
-
-  useEffect(() => {
-    if (left === 0) setRunning(false);
-  }, [left]);
-
-  const done = left === 0;
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={done ? 'Timer finished, tap to reset' : running ? 'Pause timer' : 'Start timer'}
-      onPress={() => {
-        if (done) setLeft(total);
-        else setRunning((r) => !r);
-      }}
-    >
-      <PaperCard
-        shape="c"
-        tilt={-2}
-        lift={3}
-        color={done ? paper.green : running ? paper.yellow : paper.card}
-        contentStyle={styles.timer}
-      >
-        <ClockIcon size={18} color={done ? paper.card : paper.ink} />
-        <Text style={[styles.timerText, done && { color: paper.card }]}>{done ? 'Done!' : formatClock(left)}</Text>
-        {!running && !done ? <Text style={styles.timerHint}>tap</Text> : null}
-      </PaperCard>
-    </Pressable>
-  );
-}
-
-export default function CookScreen() {
+export default function RecipeOverviewScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { width, height } = useWindowDimensions();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
+  const [fridge, setFridge] = useState<FridgeItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [stepIndex, setStepIndex] = useState(0);
-  const [pop, setPop] = useState(0);
-  const [busy, setBusy] = useState(false);
-  const [finale, setFinale] = useState<{ before: number; after: number; streak: number; earned: number } | null>(null);
-  const earnedRef = useRef(0);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
       (async () => {
-        if (!id) {
-          setLoading(false);
-          return;
-        }
-        setLoading(true);
-        const result = await getRecipe(id);
+        const [r, f] = await Promise.all([id ? getRecipe(id) : Promise.resolve(null), listFridgeItems()]);
         if (active) {
-          setRecipe(result);
-          setStepIndex(0);
-          setFinale(null);
-          earnedRef.current = 0;
+          setRecipe(r);
+          setFridge(f);
           setLoading(false);
         }
       })();
@@ -114,8 +62,7 @@ export default function CookScreen() {
       </PaperBackground>
     );
   }
-
-  if (!recipe || recipe.steps.length === 0) {
+  if (!recipe) {
     return (
       <PaperBackground style={styles.centered}>
         <Text style={styles.missing}>Recipe not found.</Text>
@@ -124,148 +71,217 @@ export default function CookScreen() {
     );
   }
 
-  const steps = recipe.steps;
-  const step = steps[stepIndex];
-  const isLast = stepIndex === steps.length - 1;
-  const ingredients = listStepIngredients(step, recipe.ingredients);
-  const sceneKind = getPaperSceneKind(step);
-  const timer = stepTimerMinutes(step.text);
-  const stepXp = XP_PER_STEP + (isLast ? XP_RECIPE_BONUS : 0);
-  const sceneSize = Math.min(width - 24, height * 0.42, 420);
+  const match = matchRecipe(recipe, fridge);
+  const missing = new Set(match.missing);
+  const kind = dishKindFor(recipe.title);
+  const color = dishColor(kind);
+  const lightBg = color === paper.yellow || color === paper.blue || color === paper.orange;
+  const fg = lightBg ? paper.ink : paper.card;
+  const totalXp = recipe.steps.length * XP_PER_STEP + XP_RECIPE_BONUS;
 
-  async function handleDone() {
-    if (busy) return;
-    setBusy(true);
-    try {
-      if (isLast) {
-        const before = (await getProfile()).xp;
-        const profile = await awardXp(stepXp, true);
-        earnedRef.current += stepXp;
-        setFinale({ before: before - (earnedRef.current - stepXp), after: profile.xp, streak: profile.streak, earned: earnedRef.current });
-      } else {
-        await awardXp(stepXp);
-        earnedRef.current += stepXp;
-        setPop((n) => n + 1);
-        setTimeout(() => setStepIndex((i) => Math.min(steps.length - 1, i + 1)), 420);
-      }
-    } finally {
-      setTimeout(() => setBusy(false), 450);
-    }
+  async function remove() {
+    if (!recipe) return;
+    await deleteRecipe(recipe.id);
+    router.back();
   }
 
   return (
     <PaperBackground>
-      <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Leave cooking" onPress={() => router.back()}>
-          <PaperCard shape="b" lift={3} contentStyle={styles.iconBtn}>
-            <BackIcon />
-          </PaperCard>
-        </Pressable>
-        <View style={styles.topRight}>
-          {timer ? <StepTimer key={`${stepIndex}-${timer}`} minutes={timer} /> : null}
-          <PaperCard color={paper.green} shape="c" tilt={2} lift={3} contentStyle={styles.xpChip}>
-            <Text style={styles.xpChipText}>+{stepXp} XP</Text>
-          </PaperCard>
-        </View>
-      </View>
-
-      {ingredients.length > 0 ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.ingRow} style={styles.ingScroll}>
-          {ingredients.slice(0, 5).map((name, i) => (
-            <Animated.View key={`${stepIndex}-${name}`} entering={ZoomIn.delay(i * 70).springify().damping(12)}>
-              <PaperCard shape={i % 2 ? 'b' : 'c'} tilt={i % 2 ? 2 : -2} lift={2} contentStyle={styles.ingChip}>
-                <IngredientArt name={name} size={28} shadow={false} />
-                <Text style={styles.ingText}>{name}</Text>
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 120 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.topBar}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()}>
+            <PaperCard shape="b" lift={3} contentStyle={styles.iconBtn}>
+              <BackIcon />
+            </PaperCard>
+          </Pressable>
+          <View style={styles.topRight}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Edit recipe"
+              onPress={() => router.push(`/recipe/edit/${recipe.id}`)}
+            >
+              <PaperCard shape="c" lift={3} color={paper.yellow} contentStyle={styles.iconBtn}>
+                <PencilIcon size={21} />
               </PaperCard>
-            </Animated.View>
-          ))}
-        </ScrollView>
-      ) : null}
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Delete recipe" onPress={() => setConfirmDelete(true)}>
+              <PaperCard shape="b" lift={3} contentStyle={styles.iconBtn}>
+                <TrashIcon size={21} color={paper.redDeep} />
+              </PaperCard>
+            </Pressable>
+          </View>
+        </View>
 
-      <View style={styles.sceneArea}>
-        <Animated.View key={`scene-${stepIndex}`} entering={FadeIn.duration(350)}>
-          <PaperScene kind={sceneKind} ingredients={ingredients} size={sceneSize} />
+        <Animated.View entering={FadeInDown.springify().damping(15)}>
+          <PaperCard color={color} shape="d" tilt={-1} lift={6} contentStyle={styles.hero}>
+            <Bob distance={6} rock={3} style={styles.heroArt}>
+              <DishArt title={recipe.title} size={150} />
+            </Bob>
+            <Text style={[styles.title, { color: fg }]}>{recipe.title}</Text>
+            <View style={styles.statRow}>
+              {[
+                `${estimateRecipeMinutes(recipe.steps.length)} min`,
+                `${recipe.steps.length} steps`,
+                `+${totalXp} XP`,
+                formatSource(recipe.source),
+              ].map((stat) => (
+                <View key={stat} style={[styles.stat, cutCorners.b]}>
+                  <Text style={styles.statText}>{stat}</Text>
+                </View>
+              ))}
+            </View>
+          </PaperCard>
         </Animated.View>
-        {pop > 0 ? <XpPop key={`pop-${pop}`} amount={XP_PER_STEP} /> : null}
-        {pop > 0 ? <ConfettiBurst key={`burst-${pop}`} count={14} /> : null}
+
+        <View>
+          <View style={styles.sectionHead}>
+            <Text style={styles.section}>Ingredients</Text>
+            <Text style={[styles.haveText, { color: missing.size ? paper.amberText : paper.greenDeep }]}>
+              Have {match.have} of {match.total}
+            </Text>
+          </View>
+          <View style={styles.ingGrid}>
+            {recipe.ingredients.map((name, i) => {
+              const have = !missing.has(name);
+              return (
+                <Animated.View key={`${name}-${i}`} entering={ZoomIn.delay(120 + i * 50).springify().damping(12)} style={styles.ingCell}>
+                  <PaperCard shape={i % 2 ? 'b' : 'c'} tilt={i % 2 ? 1.5 : -1.5} lift={3} contentStyle={styles.ing}>
+                    <IngredientArt name={name} size={44} />
+                    <Text style={styles.ingName} numberOfLines={2}>
+                      {name}
+                    </Text>
+                    <View style={[styles.ingBadge, { backgroundColor: have ? paper.green : paper.kraftDeep }]}>
+                      {have ? <CheckIcon size={12} /> : <Text style={styles.needText}>need</Text>}
+                    </View>
+                  </PaperCard>
+                </Animated.View>
+              );
+            })}
+          </View>
+        </View>
+
+        <View>
+          <Text style={[styles.section, styles.sectionGap]}>Steps</Text>
+          <View style={styles.steps}>
+            {recipe.steps.map((step, i) => {
+              const scene = SCENE_LABEL[getPaperSceneKind(step)];
+              return (
+                <Animated.View key={`${i}-${step.text}`} entering={dealIn(i + 2)}>
+                  <PaperCard shape={i % 2 ? 'b' : 'a'} lift={3} contentStyle={styles.step}>
+                    <View style={[styles.stepNum, cutCorners.c]}>
+                      <Text style={styles.stepNumText}>{i + 1}</Text>
+                    </View>
+                    <View style={styles.flex}>
+                      <Text style={styles.stepText}>{step.text}</Text>
+                      <Text style={[styles.stepTag, { color: scene.color === paper.ink ? paper.inkSoft : scene.color }]}>
+                        {scene.label}
+                      </Text>
+                    </View>
+                  </PaperCard>
+                </Animated.View>
+              );
+            })}
+          </View>
+        </View>
+      </ScrollView>
+
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 14) }]}>
+        <PaperButton label="Start cooking" size="lg" onPress={() => router.push(`/cook/${recipe.id}`)} />
       </View>
 
-      <View style={[styles.cardWrap, { paddingBottom: Math.max(insets.bottom, 14) }]}>
-        <PaperCard shape="d" lift={6} contentStyle={styles.card}>
-          <View style={styles.progress}>
-            {steps.map((_, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.seg,
-                  i % 2 ? cutCorners.b : cutCorners.c,
-                  { backgroundColor: i < stepIndex ? paper.green : i === stepIndex ? paper.yellow : paper.kraft },
-                ]}
-              />
-            ))}
-          </View>
-          <Text style={styles.meta} numberOfLines={1}>
-            {recipe.title} · Step {stepIndex + 1} of {steps.length}
-          </Text>
-          <Animated.Text key={`text-${stepIndex}`} entering={FadeInRight.springify().damping(16)} style={styles.stepText}>
-            {step.text}
-          </Animated.Text>
-          <View style={styles.nav}>
-            <PaperButton
-              accessibilityLabel="Previous step"
-              icon={<BackIcon />}
-              color={paper.kraft}
-              textColor={paper.ink}
-              disabled={stepIndex === 0 || busy}
-              onPress={() => setStepIndex((i) => Math.max(0, i - 1))}
-            />
-            <PaperButton
-              label={isLast ? 'Finish dish!' : 'Done!'}
-              size="lg"
-              color={isLast ? paper.green : paper.red}
-              disabled={busy}
-              onPress={handleDone}
-              style={styles.flex}
-            />
-          </View>
-        </PaperCard>
-      </View>
-
-      {finale ? (
-        <Celebration
-          title={recipe.title}
-          earned={finale.earned}
-          xpBefore={finale.before}
-          xpAfter={finale.after}
-          streak={finale.streak}
-          onDone={() => router.back()}
-          onAgain={() => {
-            setFinale(null);
-            earnedRef.current = 0;
-            setStepIndex(0);
-          }}
-        />
+      {confirmDelete ? (
+        <Animated.View entering={FadeIn.duration(150)} style={styles.backdrop}>
+          <Pressable accessibilityLabel="Cancel" style={StyleSheet.absoluteFill} onPress={() => setConfirmDelete(false)} />
+          <Animated.View entering={ZoomIn.springify().damping(13)} style={styles.confirmWrap}>
+            <PaperCard shape="d" tilt={-1} lift={6} contentStyle={styles.confirm}>
+              <Text style={styles.confirmTitle}>Delete this recipe?</Text>
+              <Text style={styles.confirmText}>"{recipe.title}" will be removed from your recipe box. This can't be undone.</Text>
+              <View style={styles.confirmActions}>
+                <PaperButton
+                  label="Keep it"
+                  color={paper.kraft}
+                  textColor={paper.ink}
+                  size="sm"
+                  onPress={() => setConfirmDelete(false)}
+                  style={styles.flex}
+                />
+                <PaperButton label="Delete" color={paper.red} size="sm" onPress={remove} style={styles.flex} />
+              </View>
+            </PaperCard>
+          </Animated.View>
+        </Animated.View>
       ) : null}
     </PaperBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    paddingBottom: 16,
-    paddingHorizontal: 18,
-    paddingTop: 16,
-  },
-  cardWrap: {
-    paddingHorizontal: 12,
+  backdrop: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(43,35,32,0.4)',
+    bottom: 0,
+    justifyContent: 'center',
+    left: 0,
+    padding: 24,
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
   centered: {
     alignItems: 'center',
     gap: 14,
     justifyContent: 'center',
   },
+  confirm: {
+    padding: 20,
+  },
+  confirmActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 18,
+  },
+  confirmText: {
+    color: paper.inkSoft,
+    fontFamily: fonts.body,
+    fontSize: 15,
+    marginTop: 6,
+  },
+  confirmTitle: {
+    color: paper.ink,
+    fontFamily: fonts.display,
+    fontSize: 24,
+  },
+  confirmWrap: {
+    alignSelf: 'stretch',
+  },
+  content: {
+    gap: 22,
+    paddingHorizontal: 20,
+  },
   flex: {
     flex: 1,
+  },
+  footer: {
+    bottom: 0,
+    left: 0,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    position: 'absolute',
+    right: 0,
+  },
+  haveText: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 13.5,
+  },
+  hero: {
+    alignItems: 'center',
+    padding: 20,
+  },
+  heroArt: {
+    marginBottom: 4,
   },
   iconBtn: {
     alignItems: 'center',
@@ -273,99 +289,126 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 46,
   },
-  ingChip: {
+  ing: {
     alignItems: 'center',
+    gap: 2,
+    minHeight: 104,
+    paddingHorizontal: 4,
+    paddingVertical: 10,
+  },
+  ingBadge: {
+    alignItems: 'center',
+    borderRadius: 9,
+    height: 18,
+    justifyContent: 'center',
+    minWidth: 18,
+    paddingHorizontal: 4,
+    position: 'absolute',
+    right: 6,
+    top: 6,
+  },
+  ingCell: {
+    width: '30.5%',
+  },
+  ingGrid: {
     flexDirection: 'row',
-    gap: 6,
-    paddingLeft: 6,
-    paddingRight: 12,
-    paddingVertical: 4,
+    flexWrap: 'wrap',
+    gap: 12,
   },
-  ingRow: {
-    gap: 10,
-    paddingHorizontal: 18,
-    paddingVertical: 6,
-  },
-  ingScroll: {
-    flexGrow: 0,
-  },
-  ingText: {
+  ingName: {
     color: paper.ink,
     fontFamily: fonts.bodyBold,
-    fontSize: 13,
+    fontSize: 12.5,
+    textAlign: 'center',
     textTransform: 'capitalize',
-  },
-  meta: {
-    color: paper.inkSoft,
-    fontFamily: fonts.bodyBold,
-    fontSize: 13,
   },
   missing: {
     color: paper.ink,
     fontFamily: fonts.display,
     fontSize: 22,
   },
-  nav: {
+  needText: {
+    color: paper.ink,
+    fontFamily: fonts.bodyBold,
+    fontSize: 10,
+  },
+  section: {
+    color: paper.ink,
+    fontFamily: fonts.display,
+    fontSize: 22,
+  },
+  sectionGap: {
+    marginBottom: 10,
+  },
+  sectionHead: {
+    alignItems: 'baseline',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  stat: {
+    backgroundColor: paper.card,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  statRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'center',
+    marginTop: 10,
+  },
+  statText: {
+    color: paper.ink,
+    fontFamily: fonts.bodyBold,
+    fontSize: 12.5,
+  },
+  step: {
+    alignItems: 'flex-start',
     flexDirection: 'row',
     gap: 12,
+    padding: 12,
   },
-  progress: {
-    flexDirection: 'row',
-    gap: 6,
-    marginBottom: 12,
-  },
-  sceneArea: {
+  stepNum: {
     alignItems: 'center',
-    flex: 1,
+    backgroundColor: paper.ink,
+    height: 32,
     justifyContent: 'center',
+    width: 32,
   },
-  seg: {
-    flex: 1,
-    height: 9,
+  stepNumText: {
+    color: paper.card,
+    fontFamily: fonts.display,
+    fontSize: 16,
+  },
+  stepTag: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 12,
+    marginTop: 3,
+    textTransform: 'uppercase',
   },
   stepText: {
     color: paper.ink,
+    fontFamily: fonts.body,
+    fontSize: 15.5,
+    lineHeight: 21,
+  },
+  steps: {
+    gap: 12,
+  },
+  title: {
     fontFamily: fonts.display,
-    fontSize: 26,
-    lineHeight: 31,
-    marginBottom: 14,
-    marginTop: 4,
-  },
-  timer: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  timerHint: {
-    color: paper.inkSoft,
-    fontFamily: fonts.bodyBold,
-    fontSize: 11,
-  },
-  timerText: {
-    color: paper.ink,
-    fontFamily: fonts.display,
-    fontSize: 18,
+    fontSize: 30,
+    lineHeight: 36,
+    textAlign: 'center',
   },
   topBar: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
   },
   topRight: {
-    alignItems: 'center',
     flexDirection: 'row',
-    gap: 10,
-  },
-  xpChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  xpChipText: {
-    color: paper.card,
-    fontFamily: fonts.display,
-    fontSize: 16,
+    gap: 12,
   },
 });

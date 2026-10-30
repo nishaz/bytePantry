@@ -26,9 +26,10 @@ interface ItemSheetProps {
   bottom: number;
   onClose: () => void;
   onUsedUp: () => void;
+  onEdit: () => void;
 }
 
-export function ItemSheet({ item, bottom, onClose, onUsedUp }: ItemSheetProps) {
+export function ItemSheet({ item, bottom, onClose, onUsedUp, onEdit }: ItemSheetProps) {
   return (
     <Animated.View
       entering={SlideInDown.springify().damping(15)}
@@ -50,6 +51,7 @@ export function ItemSheet({ item, bottom, onClose, onUsedUp }: ItemSheetProps) {
         </View>
         <View style={styles.actions}>
           <PaperButton label="Close" color={paper.kraft} textColor={paper.ink} size="sm" onPress={onClose} style={styles.flex} />
+          <PaperButton label="Edit" color={paper.yellow} textColor={paper.ink} size="sm" onPress={onEdit} style={styles.flex} />
           <PaperButton label="Used it up" color={paper.green} size="sm" onPress={onUsedUp} style={styles.flex} />
         </View>
       </PaperCard>
@@ -60,7 +62,7 @@ export function ItemSheet({ item, bottom, onClose, onUsedUp }: ItemSheetProps) {
 const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
     marginTop: 14,
   },
   card: {

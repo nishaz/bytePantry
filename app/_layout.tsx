@@ -48,8 +48,10 @@ export default function RootLayout() {
       <StatusBar style="dark" />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: paper.kraft } }}>
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="recipe/[id]" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="recipe/edit/[id]" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen
-          name="recipe/[id]"
+          name="cook/[id]"
           options={{
             presentation: 'fullScreenModal',
             animation: 'slide_from_bottom',

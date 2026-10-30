@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { addFridgeItem, defaultLocationFor } from '../../lib/fridgeDb';
+import { addFridgeItem, defaultLocationFor, updateFridgeItem } from '../../lib/fridgeDb';
 import { fonts, paper } from '../../lib/theme';
-import { INGREDIENT_CATEGORIES, type StorageLocation } from '../../types/fridge';
+import { INGREDIENT_CATEGORIES, type FridgeItem, type StorageLocation } from '../../types/fridge';
 import { FilterChip } from '../paper/FilterChip';
 import { IngredientArt } from '../paper/IngredientArt';
 import { PaperButton } from '../paper/PaperButton';
@@ -22,15 +22,42 @@ interface AddItemSheetProps {
   visible: boolean;
   onClose: () => void;
   onSaved: () => void;
+  /** When set, the sheet edits this item instead of adding a new one. */
+  editing?: FridgeItem | null;
 }
 
-export function AddItemSheet({ visible, onClose, onSaved }: AddItemSheetProps) {
+function currentExpiryLabel(days: number): string {
+  if (days <= 0) return 'As is (today)';
+  if (days === 1) return 'As is (1 day)';
+  if (days > 60) return 'As is (months)';
+  return `As is (${days} days)`;
+}
+
+export function AddItemSheet({ visible, onClose, onSaved, editing }: AddItemSheetProps) {
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState<string>('Produce');
   const [location, setLocation] = useState<StorageLocation>('fridge');
   const [days, setDays] = useState(7);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!visible) return;
+    if (editing) {
+      setName(editing.name);
+      setAmount(editing.amount);
+      setCategory(editing.category);
+      setLocation(editing.location);
+      setDays(editing.daysUntilExpiry);
+    } else {
+      reset();
+    }
+  }, [editing, visible]);
+
+  const expiryOptions =
+    editing && !EXPIRY_OPTIONS.some((o) => o.days === editing.daysUntilExpiry)
+      ? [{ label: currentExpiryLabel(editing.daysUntilExpiry), days: editing.daysUntilExpiry }, ...EXPIRY_OPTIONS]
+      : EXPIRY_OPTIONS;
 
   function reset() {
     setName('');
@@ -44,7 +71,9 @@ export function AddItemSheet({ visible, onClose, onSaved }: AddItemSheetProps) {
     if (!name.trim()) return;
     setSaving(true);
     try {
-      await addFridgeItem({ name: name.trim(), amount: amount.trim() || '1', category, location, days });
+      const item = { name: name.trim(), amount: amount.trim() || '1', category, location, days };
+      if (editing) await updateFridgeItem(editing.id, item);
+      else await addFridgeItem(item);
       reset();
       onSaved();
     } finally {
@@ -60,7 +89,7 @@ export function AddItemSheet({ visible, onClose, onSaved }: AddItemSheetProps) {
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
             <View style={styles.head}>
               <IngredientArt name={name || '?'} size={60} />
-              <Text style={styles.title}>Add to pantry</Text>
+              <Text style={styles.title}>{editing ? 'Edit item' : 'Add to pantry'}</Text>
             </View>
 
             <Text style={styles.label}>What is it?</Text>
@@ -106,7 +135,7 @@ export function AddItemSheet({ visible, onClose, onSaved }: AddItemSheetProps) {
 
             <Text style={styles.label}>Use within</Text>
             <View style={styles.wrapRow}>
-              {EXPIRY_OPTIONS.map((o) => (
+              {expiryOptions.map((o) => (
                 <FilterChip key={o.label} label={o.label} active={days === o.days} onPress={() => setDays(o.days)} />
               ))}
             </View>
@@ -114,7 +143,7 @@ export function AddItemSheet({ visible, onClose, onSaved }: AddItemSheetProps) {
             <View style={styles.actions}>
               <PaperButton label="Cancel" color={paper.kraft} textColor={paper.ink} onPress={onClose} style={styles.flex} />
               <PaperButton
-                label={saving ? 'Saving…' : 'Put it away'}
+                label={saving ? 'Saving…' : editing ? 'Save changes' : 'Put it away'}
                 color={paper.red}
                 disabled={!name.trim() || saving}
                 onPress={save}

@@ -8,28 +8,55 @@ import Animated, {
   withRepeat,
   withSequence,
   withTiming,
+  type SharedValue,
 } from 'react-native-reanimated';
 import Svg, { Circle, Ellipse, G, Path, Rect } from 'react-native-svg';
 
 import { paper } from '../../../lib/theme';
 import { IngredientArt } from '../../paper/IngredientArt';
-import { Buzz, Drop, Hop, Pop, Spin, Steam, useLoop, Wobble } from './anim';
+import { Buzz, Drop, Hop, Pop, Spin, Steam, Toss, useLoop, Wobble } from './anim';
 
 export type PaperSceneKind = 'board' | 'pan' | 'pot' | 'oven' | 'blender' | 'bowl';
 
 /** The scenes are drawn on a 320×320 stage and scaled to fit the screen. */
 export const STAGE = 320;
 
+/** Live values from the player's gestures. Omit for the ambient (looping) version of a scene. */
+export interface ScenePlay {
+  /** Board: how many times the player has tapped to chop. */
+  chops?: number;
+  /** Pot: spoon angle in degrees, driven by circling a finger. */
+  stirAngle?: SharedValue<number>;
+  /** Blender: true while the button is held. */
+  blending?: boolean;
+  /** Blender: 0-1 how full the jug is. */
+  fill?: SharedValue<number>;
+  /** Bowl: whisk offset in stage px, driven by swiping. */
+  whiskX?: SharedValue<number>;
+}
+
 interface SceneProps {
   ingredients: string[];
+  play?: ScenePlay;
 }
 
 /* ---------- Chop: knife on a board, pieces hop off ---------- */
-function BoardScene({ ingredients }: SceneProps) {
+function BoardScene({ ingredients, play }: SceneProps) {
   const main = ingredients[0] ?? 'onion';
   const second = ingredients[1];
   const chop = useSharedValue(0);
+  const chops = play?.chops;
   useEffect(() => {
+    if (chops !== undefined) {
+      if (chops > 0) {
+        chop.value = withSequence(
+          withTiming(1, { duration: 120, easing: Easing.in(Easing.quad) }),
+          withTiming(0.9, { duration: 40 }),
+          withTiming(0, { duration: 220, easing: Easing.out(Easing.quad) }),
+        );
+      }
+      return;
+    }
     chop.value = withRepeat(
       withSequence(
         withTiming(1, { duration: 210, easing: Easing.in(Easing.quad) }),
@@ -38,7 +65,7 @@ function BoardScene({ ingredients }: SceneProps) {
       ),
       -1,
     );
-  }, [chop]);
+  }, [chop, chops]);
   const knife = useAnimatedStyle(() => ({
     transform: [{ rotate: `${interpolate(chop.value, [0, 1], [-28, 2])}deg` }],
   }));
@@ -63,15 +90,25 @@ function BoardScene({ ingredients }: SceneProps) {
             <IngredientArt name={second} size={46} />
           </View>
         ) : null}
-        <Hop x={128} y={62} dx={-70} delay={0}>
-          <IngredientArt name={main} size={24} shadow={false} />
-        </Hop>
-        <Hop x={140} y={66} dx={60} delay={550}>
-          <IngredientArt name={second ?? main} size={20} shadow={false} />
-        </Hop>
-        <Hop x={136} y={70} dx={-30} height={36} delay={275} duration={900}>
-          <IngredientArt name={main} size={16} shadow={false} />
-        </Hop>
+        {chops === undefined ? (
+          <>
+            <Hop x={128} y={62} dx={-70} delay={0}>
+              <IngredientArt name={main} size={24} shadow={false} />
+            </Hop>
+            <Hop x={140} y={66} dx={60} delay={550}>
+              <IngredientArt name={second ?? main} size={20} shadow={false} />
+            </Hop>
+            <Hop x={136} y={70} dx={-30} height={36} delay={275} duration={900}>
+              <IngredientArt name={main} size={16} shadow={false} />
+            </Hop>
+          </>
+        ) : (
+          Array.from({ length: Math.min(chops * 2, 16) }, (_, i) => (
+            <Toss key={i} x={132} y={64} dx={(i % 2 ? 1 : -1) * (24 + ((i * 23) % 70))} dy={-20 + ((i * 17) % 50)}>
+              <IngredientArt name={i % 3 === 2 && second ? second : main} size={18 + (i % 3) * 3} shadow={false} />
+            </Toss>
+          ))
+        )}
       </Animated.View>
       <Animated.View style={[styles.abs, { left: 120, top: 10, width: 200, height: 180, transformOrigin: '92% 88%' }, knife]}>
         <Svg width={200} height={180} viewBox="0 0 200 180">
@@ -120,7 +157,7 @@ function PanScene({ ingredients }: SceneProps) {
 }
 
 /* ---------- Stir / simmer: spoon circles a bubbling pot ---------- */
-function PotScene({ ingredients }: SceneProps) {
+function PotScene({ ingredients, play }: SceneProps) {
   const items = ingredients.slice(0, 3);
   const bubble = useLoop(1200, 0, true, Easing.inOut(Easing.sin));
   const bubbleStyle = (offset: number) =>
@@ -142,7 +179,7 @@ function PotScene({ ingredients }: SceneProps) {
         <Circle cx="160" cy="146" r="126" fill="#9AA3A8" />
         <Circle cx="160" cy="146" r="108" fill={paper.red} />
       </Svg>
-      <Spin duration={5000} style={[styles.abs, { left: 52, top: 58, width: 216, height: 216 }]}>
+      <Spin duration={5000} angle={play?.stirAngle} factor={0.6} style={[styles.abs, { left: 52, top: 58, width: 216, height: 216 }]}>
         <Svg width={216} height={216} viewBox="0 0 216 216">
           <Path d="M28 108a80 80 0 0 1 80-80M188 108a80 80 0 0 1-80 80M63 108a45 45 0 0 1 45-45M153 108a45 45 0 0 1-45 45" fill="none" stroke="#F2885F" strokeWidth={10} strokeLinecap="round" />
         </Svg>
@@ -155,7 +192,7 @@ function PotScene({ ingredients }: SceneProps) {
       <Animated.View style={[styles.bubble, { left: 108, top: 120 }, b1]} />
       <Animated.View style={[styles.bubble, { left: 196, top: 186, width: 16, height: 16 }, b2]} />
       <Animated.View style={[styles.bubble, { left: 178, top: 104, width: 14, height: 14 }, b3]} />
-      <Spin duration={3000} style={[styles.abs, { left: 40, top: 46, width: 240, height: 240 }]}>
+      <Spin duration={3000} angle={play?.stirAngle} style={[styles.abs, { left: 40, top: 46, width: 240, height: 240 }]}>
         <Svg style={[styles.abs, { left: 116, top: 12 }]} width={130} height={40} viewBox="0 0 130 40">
           <Rect x="10" y="14" width="118" height="12" rx="6" fill={paper.brown} />
           <Ellipse cx="18" cy="20" rx="16" ry="12" fill="#D9A673" />
@@ -243,17 +280,22 @@ function HeatWave({ x, delay }: { x: number; delay: number }) {
 }
 
 /* ---------- Blend: blender buzzes, contents swirl and fill ---------- */
-function BlenderScene({ ingredients }: SceneProps) {
-  const fill = useLoop(4000, 0, true, Easing.inOut(Easing.quad));
+function BlenderScene({ ingredients, play }: SceneProps) {
+  const loopFill = useLoop(4000, 0, true, Easing.inOut(Easing.quad));
   const lid = useLoop(240, 0, true);
-  const fillStyle = useAnimatedStyle(() => ({ transform: [{ scaleY: 0.25 + fill.value * 0.75 }] }));
-  const lidStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -4 * lid.value }] }));
+  const interactive = play?.blending !== undefined;
+  const running = interactive ? !!play?.blending : true;
+  const fillValue = play?.fill;
+  const fillStyle = useAnimatedStyle(() => ({
+    transform: [{ scaleY: 0.12 + (fillValue ? fillValue.value : loopFill.value) * 0.88 }],
+  }));
+  const lidStyle = useAnimatedStyle(() => ({ transform: [{ translateY: running ? -4 * lid.value : 0 }] }));
   const items = ingredients.slice(0, 4);
   const liquid = items.some((i) => /berr|straw|beet/.test(i.toLowerCase())) ? '#E86A8A' : paper.green;
 
   return (
     <View style={styles.stage}>
-      <Buzz amount={2} duration={120} style={[styles.abs, { left: 70, top: 0, width: 180, height: 320 }]}>
+      <Buzz amount={2} duration={120} paused={!running} style={[styles.abs, { left: 70, top: 0, width: 180, height: 320 }]}>
         <Svg style={StyleSheet.absoluteFill} width={180} height={320} viewBox="0 0 180 320">
           <Rect x="30" y="244" width="124" height="72" rx="16" fill={paper.shadow} />
           <Rect x="24" y="238" width="124" height="72" rx="16" fill={paper.red} />
@@ -263,7 +305,7 @@ function BlenderScene({ ingredients }: SceneProps) {
           <Path d="M146 82h16a10 10 0 0 1 10 10v74a10 10 0 0 1-10 10h-22" fill="none" stroke={paper.ink} strokeWidth={8} />
         </Svg>
         <Animated.View style={[styles.liquid, { backgroundColor: liquid, transformOrigin: '50% 100%' }, fillStyle]} />
-        <Spin duration={500} style={[styles.abs, { left: 40, top: 120, width: 92, height: 92 }]}>
+        <Spin duration={500} paused={!running} style={[styles.abs, { left: 40, top: 120, width: 92, height: 92 }]}>
           {items.map((name, i) => (
             <View key={`${name}-${i}`} style={[styles.abs, { left: [0, 52, 26, 50][i], top: [30, 6, 56, 50][i] }]}>
               <IngredientArt name={name} size={36} shadow={false} />
@@ -280,20 +322,32 @@ function BlenderScene({ ingredients }: SceneProps) {
           </Svg>
         </Animated.View>
       </Buzz>
-      <Pop x={60} y={80} color={liquid} size={12} />
-      <Pop x={262} y={110} color={liquid} size={10} delay={500} />
+      {running ? (
+        <>
+          <Pop x={60} y={80} color={liquid} size={12} />
+          <Pop x={262} y={110} color={liquid} size={10} delay={500} />
+        </>
+      ) : null}
     </View>
   );
 }
 
 /* ---------- Mix / whisk / pour: whisk swishes through batter ---------- */
-function BowlScene({ ingredients }: SceneProps) {
+function BowlScene({ ingredients, play }: SceneProps) {
   const t = useLoop(1000);
+  const whiskX = play?.whiskX;
   const whisk = useAnimatedStyle(() => {
+    if (whiskX) {
+      return { transform: [{ translateX: whiskX.value }, { rotate: `${(whiskX.value / 60) * 16}deg` }] };
+    }
     const a = t.value * Math.PI * 2;
     return { transform: [{ translateX: Math.cos(a) * 34 }, { translateY: Math.sin(a) * 8 }, { rotate: `${Math.cos(a) * 14}deg` }] };
   });
-  const ripple = useAnimatedStyle(() => ({ transform: [{ scaleX: 1 - Math.abs(Math.sin(t.value * Math.PI * 2)) * 0.06 }] }));
+  const ripple = useAnimatedStyle(() => ({
+    transform: [
+      { scaleX: whiskX ? 1 - (Math.abs(whiskX.value) / 60) * 0.06 : 1 - Math.abs(Math.sin(t.value * Math.PI * 2)) * 0.06 },
+    ],
+  }));
   const items = ingredients.slice(0, 2);
 
   return (
@@ -337,13 +391,23 @@ const SCENES: Record<PaperSceneKind, (props: SceneProps) => React.JSX.Element> =
 };
 
 /** Draws the animated scene for a step at whatever size the screen gives it. */
-export function PaperScene({ kind, ingredients, size }: { kind: PaperSceneKind; ingredients: string[]; size: number }) {
+export function PaperScene({
+  kind,
+  ingredients,
+  size,
+  play,
+}: {
+  kind: PaperSceneKind;
+  ingredients: string[];
+  size: number;
+  play?: ScenePlay;
+}) {
   const Scene = SCENES[kind];
   const scale = size / STAGE;
   return (
     <View style={{ width: size, height: size }}>
       <View style={[styles.scaler, { transform: [{ scale }] }]}>
-        <Scene ingredients={ingredients} />
+        <Scene ingredients={ingredients} play={play} />
       </View>
     </View>
   );

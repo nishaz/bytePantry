@@ -157,6 +157,23 @@ export async function addFridgeItem(item: NewFridgeItem): Promise<void> {
   );
 }
 
+export async function updateFridgeItem(id: string, item: NewFridgeItem): Promise<void> {
+  await runDb((db) =>
+    db.runAsync(
+      `UPDATE fridge_items SET spriteName = ?, name = ?, category = ?, amount = ?, daysUntilExpiry = ?, expiresOn = ?, location = ?
+       WHERE id = ?`,
+      item.name.toLowerCase(),
+      item.name,
+      item.category,
+      item.amount,
+      item.days,
+      dateInDays(item.days),
+      item.location,
+      id,
+    ),
+  );
+}
+
 export async function removeFridgeItem(id: string): Promise<void> {
   await runDb((db) => db.runAsync('DELETE FROM fridge_items WHERE id = ?', id));
 }

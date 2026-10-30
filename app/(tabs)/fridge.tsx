@@ -36,6 +36,7 @@ export default function PantryScreen() {
   const [filter, setFilter] = useState<Filter>('All');
   const [selected, setSelected] = useState<FridgeItem | null>(null);
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<FridgeItem | null>(null);
 
   const visible = fridge.filter((item) => filter === 'All' || item.category === filter);
   const inFridge = visible.filter((item) => item.location === 'fridge');
@@ -80,7 +81,10 @@ export default function PantryScreen() {
             icon={<PlusIcon size={20} />}
             color={paper.red}
             size="sm"
-            onPress={() => setAdding(true)}
+            onPress={() => {
+              setEditing(null);
+              setAdding(true);
+            }}
           />
         </View>
       </View>
@@ -147,14 +151,25 @@ export default function PantryScreen() {
       </View>
 
       {selected ? (
-        <ItemSheet item={selected} bottom={tabBarSpace} onClose={() => setSelected(null)} onUsedUp={() => usedUp(selected)} />
+        <ItemSheet item={selected} bottom={tabBarSpace} onClose={() => setSelected(null)} onUsedUp={() => usedUp(selected)}
+          onEdit={() => {
+            setEditing(selected);
+            setSelected(null);
+            setAdding(true);
+          }}
+        />
       ) : null}
 
       <AddItemSheet
         visible={adding}
-        onClose={() => setAdding(false)}
+        editing={editing}
+        onClose={() => {
+          setAdding(false);
+          setEditing(null);
+        }}
         onSaved={() => {
           setAdding(false);
+          setEditing(null);
           reload();
         }}
       />

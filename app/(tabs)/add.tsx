@@ -4,31 +4,14 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { IngredientArt } from '../../components/paper/IngredientArt';
 import { Bob } from '../../components/paper/Motion';
 import { PaperBackground } from '../../components/paper/PaperBackground';
 import { PaperButton } from '../../components/paper/PaperButton';
 import { PaperCard } from '../../components/paper/PaperCard';
 import { LinkIcon, MicIcon, PencilIcon } from '../../components/paper/UiIcons';
+import { RecipeForm, type RecipeDraft } from '../../components/recipe/RecipeForm';
 import { createRecipeId, saveRecipe } from '../../lib/db';
-import { inferAction } from '../../lib/stepSceneLayout';
 import { cutCorners, fonts, paper } from '../../lib/theme';
-import type { Recipe, Step } from '../../types/recipe';
-
-function parseIngredients(raw: string): string[] {
-  return raw
-    .split(/[\n,]+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function parseSteps(raw: string): Step[] {
-  return raw
-    .split('\n')
-    .map((line) => line.replace(/^\s*\d+[.)]\s*/, '').trim())
-    .filter(Boolean)
-    .map((text) => ({ text, action: inferAction(text), ingredient: '', tool: '' }));
-}
 
 export default function AddScreen() {
   const router = useRouter();
@@ -37,43 +20,16 @@ export default function AddScreen() {
   const [linkNote, setLinkNote] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [voiceNote, setVoiceNote] = useState(false);
-  const [title, setTitle] = useState('');
-  const [ingredientsText, setIngredientsText] = useState('');
-  const [stepsText, setStepsText] = useState('');
-  const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [formKey, setFormKey] = useState(0);
 
-  const ingredients = parseIngredients(ingredientsText);
-
-  async function handleSave() {
-    const trimmed = title.trim();
-    const steps = parseSteps(stepsText);
-    if (!trimmed) return setError('Give your recipe a name.');
-    if (steps.length === 0) return setError('Add at least one step, one per line.');
-    setError('');
-    const recipe: Recipe = {
-      id: createRecipeId(),
-      title: trimmed,
-      ingredients,
-      steps,
-      source: link.trim() ? 'link' : 'manual',
-      createdAt: Date.now(),
-    };
-    setSaving(true);
-    try {
-      await saveRecipe(recipe);
-      setTitle('');
-      setIngredientsText('');
-      setStepsText('');
-      setLink('');
-      setShowForm(false);
-      router.push(`/recipe/${recipe.id}`);
-    } catch (e) {
-      console.error(e);
-      setError('Could not save the recipe. Please try again.');
-    } finally {
-      setSaving(false);
-    }
+  async function save(draft: RecipeDraft) {
+    const id = createRecipeId();
+    await saveRecipe({ id, ...draft, source: link.trim() ? 'link' : 'manual', createdAt: Date.now() });
+    setLink('');
+    setLinkNote(false);
+    setShowForm(false);
+    setFormKey((k) => k + 1);
+    router.push(`/cook/${id}`);
   }
 
   return (
@@ -165,60 +121,7 @@ export default function AddScreen() {
 
           {showForm ? (
             <Animated.View entering={FadeInDown.springify().damping(15)}>
-              <PaperCard shape="a" lift={5} contentStyle={styles.form}>
-                <Text style={styles.label}>Recipe name</Text>
-                <TextInput
-                  value={title}
-                  onChangeText={setTitle}
-                  placeholder="Sunday pancakes"
-                  placeholderTextColor={paper.inkSoft}
-                  style={[styles.input, cutCorners.c]}
-                  accessibilityLabel="Recipe name"
-                />
-
-                <Text style={styles.label}>Ingredients</Text>
-                <TextInput
-                  value={ingredientsText}
-                  onChangeText={setIngredientsText}
-                  placeholder="flour, eggs, milk"
-                  placeholderTextColor={paper.inkSoft}
-                  multiline
-                  style={[styles.input, styles.multiline, cutCorners.c]}
-                  accessibilityLabel="Ingredients, separated by commas or new lines"
-                />
-                {ingredients.length > 0 ? (
-                  <View style={styles.preview}>
-                    {ingredients.slice(0, 10).map((name, i) => (
-                      <Animated.View key={`${name}-${i}`} entering={FadeIn.delay(i * 40)} style={styles.previewItem}>
-                        <IngredientArt name={name} size={36} />
-                        <Text style={styles.previewText} numberOfLines={1}>
-                          {name}
-                        </Text>
-                      </Animated.View>
-                    ))}
-                  </View>
-                ) : null}
-
-                <Text style={styles.label}>Steps (one per line)</Text>
-                <TextInput
-                  value={stepsText}
-                  onChangeText={setStepsText}
-                  placeholder={'Mix the batter\nFry in a pan\nServe warm'}
-                  placeholderTextColor={paper.inkSoft}
-                  multiline
-                  style={[styles.input, styles.multiline, styles.steps, cutCorners.c]}
-                  accessibilityLabel="Steps, one per line"
-                />
-
-                {error ? <Text style={styles.error}>{error}</Text> : null}
-                <PaperButton
-                  label={saving ? 'Saving…' : 'Save & start cooking'}
-                  size="lg"
-                  disabled={saving}
-                  onPress={handleSave}
-                  style={styles.save}
-                />
-              </PaperCard>
+              <RecipeForm key={formKey} submitLabel="Save & start cooking" onSubmit={save} />
             </Animated.View>
           ) : null}
         </ScrollView>
@@ -232,17 +135,8 @@ const styles = StyleSheet.create({
     gap: 20,
     paddingHorizontal: 20,
   },
-  error: {
-    color: paper.redDeep,
-    fontFamily: fonts.bodyBold,
-    fontSize: 14,
-    marginTop: 10,
-  },
   flex: {
     flex: 1,
-  },
-  form: {
-    padding: 18,
   },
   iconBubble: {
     alignItems: 'center',
@@ -251,26 +145,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 46,
   },
-  input: {
-    backgroundColor: paper.kraft,
-    color: paper.ink,
-    fontFamily: fonts.body,
-    fontSize: 16,
-    minHeight: 48,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
   kicker: {
     color: paper.inkSoft,
     fontFamily: fonts.bodyBold,
     fontSize: 14,
-  },
-  label: {
-    color: paper.ink,
-    fontFamily: fonts.bodyBold,
-    fontSize: 14,
-    marginBottom: 6,
-    marginTop: 12,
   },
   linkCard: {
     gap: 14,
@@ -313,33 +191,8 @@ const styles = StyleSheet.create({
     fontSize: 24,
     lineHeight: 28,
   },
-  multiline: {
-    minHeight: 90,
-    textAlignVertical: 'top',
-  },
   pressed: {
     transform: [{ scale: 0.97 }],
-  },
-  preview: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 10,
-  },
-  previewItem: {
-    alignItems: 'center',
-    width: 62,
-  },
-  previewText: {
-    color: paper.ink,
-    fontFamily: fonts.bodyBold,
-    fontSize: 11,
-  },
-  save: {
-    marginTop: 18,
-  },
-  steps: {
-    minHeight: 130,
   },
   tile: {
     alignItems: 'flex-start',

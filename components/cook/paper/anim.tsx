@@ -108,16 +108,49 @@ export function Steam({ x, y, delay = 0, color = paper.card }: { x: number; y: n
 }
 
 /** Wrap children in a constant spin (deg per loop = 360). */
-export function Spin({ duration, children, style, reverse }: { duration: number; children: ReactNode; style?: StyleProp<ViewStyle>; reverse?: boolean }) {
+export function Spin({
+  duration,
+  children,
+  style,
+  reverse,
+  angle,
+  factor = 1,
+  paused,
+}: {
+  duration: number;
+  children: ReactNode;
+  style?: StyleProp<ViewStyle>;
+  reverse?: boolean;
+  /** When given, the rotation follows this value (degrees × factor) instead of looping. */
+  angle?: SharedValue<number>;
+  factor?: number;
+  paused?: boolean;
+}) {
   const p = useLoop(duration);
-  const s = useAnimatedStyle(() => ({ transform: [{ rotate: `${(reverse ? -1 : 1) * p.value * 360}deg` }] }));
+  const s = useAnimatedStyle(() => {
+    if (angle) return { transform: [{ rotate: `${angle.value * factor}deg` }] };
+    if (paused) return { transform: [{ rotate: '0deg' }] };
+    return { transform: [{ rotate: `${(reverse ? -1 : 1) * p.value * 360}deg` }] };
+  });
   return <Animated.View style={[style, s]}>{children}</Animated.View>;
 }
 
 /** Fast tiny jitter, like something sizzling or a motor running. */
-export function Buzz({ children, style, amount = 2, duration = 120 }: { children: ReactNode; style?: StyleProp<ViewStyle>; amount?: number; duration?: number }) {
+export function Buzz({
+  children,
+  style,
+  amount = 2,
+  duration = 120,
+  paused,
+}: {
+  children: ReactNode;
+  style?: StyleProp<ViewStyle>;
+  amount?: number;
+  duration?: number;
+  paused?: boolean;
+}) {
   const p = useLoop(duration);
-  const s = useAnimatedStyle(() => ({
+  const s = useAnimatedStyle(() => paused ? { transform: [] } : ({
     transform: [
       { translateX: Math.sin(p.value * Math.PI * 2) * amount },
       { translateY: Math.cos(p.value * Math.PI * 4) * amount * 0.6 },
@@ -132,4 +165,20 @@ export function Wobble({ children, style, deg = 2, duration = 1800 }: { children
   const p = useLoop(duration, 0, true, Easing.inOut(Easing.sin));
   const s = useAnimatedStyle(() => ({ transform: [{ rotate: `${(p.value - 0.5) * 2 * deg}deg` }] }));
   return <Animated.View style={[style, s]}>{children}</Animated.View>;
+}
+
+/** One-shot toss: flies from the cut point and lands where it stays (used by tap-to-chop). */
+export function Toss({ x, y, dx, dy, children }: PlacedProps & { dx: number; dy: number }) {
+  const p = useSharedValue(0);
+  useEffect(() => {
+    p.value = withTiming(1, { duration: 520, easing: Easing.out(Easing.quad) });
+  }, [p]);
+  const style = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: dx * p.value },
+      { translateY: -46 * Math.sin(Math.PI * p.value) + dy * p.value },
+      { rotate: `${p.value * (dx > 0 ? 260 : -260)}deg` },
+    ],
+  }));
+  return <Animated.View style={[{ position: 'absolute', left: x, top: y }, style]}>{children}</Animated.View>;
 }

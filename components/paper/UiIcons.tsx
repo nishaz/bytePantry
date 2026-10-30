@@ -141,3 +141,22 @@ export function StarIcon({ size = 18, filled = true }: { size?: number; filled?:
     </Svg>
   );
 }
+
+export function TrashIcon({ size = 22, color = paper.ink, strokeWidth = 2.4 }: IconProps) {
+  const s = stroke(color, strokeWidth);
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" {...s} />
+      <Path d="M10 11v6M14 11v6" {...s} />
+    </Svg>
+  );
+}
+
+export function CheckIcon({ size = 16, color = paper.card, strokeWidth = 3 }: IconProps) {
+  const s = stroke(color, strokeWidth);
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M5 12l5 5 9-10" {...s} />
+    </Svg>
+  );
+}

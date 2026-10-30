@@ -92,7 +92,7 @@ export default function KitchenScreen() {
                   color={paper.card}
                   textColor={paper.ink}
                   size="md"
-                  onPress={() => router.push(`/recipe/${cookNow.recipe.id}`)}
+                  onPress={() => router.push(`/cook/${cookNow.recipe.id}`)}
                   style={styles.heroBtn}
                 />
               </View>

@@ -117,6 +117,10 @@ export async function listRecipes(): Promise<Recipe[]> {
   });
 }
 
+export async function deleteRecipe(id: string): Promise<void> {
+  await runDb((db) => db.runAsync('DELETE FROM recipes WHERE id = ?', id));
+}
+
 export function createRecipeId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
