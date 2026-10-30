@@ -6,69 +6,21 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Celebration, ConfettiBurst, XpPop } from '../../components/cook/paper/Celebration';
 import { GAME_BONUS_XP, InteractiveScene } from '../../components/cook/paper/InteractiveScene';
+import { KitchenTimer, TimerPill, type TimerState } from '../../components/cook/paper/KitchenTimer';
 import { IngredientArt } from '../../components/paper/IngredientArt';
 import { PaperBackground } from '../../components/paper/PaperBackground';
 import { PaperButton } from '../../components/paper/PaperButton';
 import { PaperCard } from '../../components/paper/PaperCard';
-import { BackIcon, ClockIcon } from '../../components/paper/UiIcons';
+import { BackIcon } from '../../components/paper/UiIcons';
 import { getRecipe } from '../../lib/db';
 import { awardXp, getProfile, XP_PER_STEP, XP_RECIPE_BONUS } from '../../lib/profile';
 import { listStepIngredients } from '../../lib/stepIngredients';
 import { getPaperSceneKind, stepTimerMinutes } from '../../lib/stepSceneLayout';
 import { cutCorners, fonts, paper } from '../../lib/theme';
+import { startAlarm, stopAlarm } from '../../lib/timerAlarm';
 import type { Recipe } from '../../types/recipe';
 
-function formatClock(totalSeconds: number): string {
-  const m = Math.floor(totalSeconds / 60);
-  const s = totalSeconds % 60;
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
-
-/** Countdown for steps that mention a time. Tap to start / pause. */
-function StepTimer({ minutes }: { minutes: number }) {
-  const total = Math.round(minutes * 60);
-  const [left, setLeft] = useState(total);
-  const [running, setRunning] = useState(false);
-
-  useEffect(() => {
-    setLeft(total);
-    setRunning(false);
-  }, [total]);
-
-  useEffect(() => {
-    if (!running) return undefined;
-    const id = setInterval(() => setLeft((s) => Math.max(0, s - 1)), 1000);
-    return () => clearInterval(id);
-  }, [running]);
-
-  useEffect(() => {
-    if (left === 0) setRunning(false);
-  }, [left]);
-
-  const done = left === 0;
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={done ? 'Timer finished, tap to reset' : running ? 'Pause timer' : 'Start timer'}
-      onPress={() => {
-        if (done) setLeft(total);
-        else setRunning((r) => !r);
-      }}
-    >
-      <PaperCard
-        shape="c"
-        tilt={-2}
-        lift={3}
-        color={done ? paper.green : running ? paper.yellow : paper.card}
-        contentStyle={styles.timer}
-      >
-        <ClockIcon size={18} color={done ? paper.card : paper.ink} />
-        <Text style={[styles.timerText, done && { color: paper.card }]}>{done ? 'Done!' : formatClock(left)}</Text>
-        {!running && !done ? <Text style={styles.timerHint}>tap</Text> : null}
-      </PaperCard>
-    </Pressable>
-  );
-}
+const SUGGESTED_MINUTES: Partial<Record<string, number>> = { oven: 20, pot: 10, pan: 5 };
 
 export default function CookScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -84,6 +36,35 @@ export default function CookScreen() {
   const [finale, setFinale] = useState<{ before: number; after: number; streak: number; earned: number } | null>(null);
   const earnedRef = useRef(0);
   const lastXp = useRef(XP_PER_STEP);
+  const [timers, setTimers] = useState<Record<number, TimerState>>({});
+  const anyRunning = Object.values(timers).some((t) => t.running);
+  const anyRinging = Object.values(timers).some((t) => t.ringing);
+
+  // Tick every running timer from its end time, so it stays accurate even if the app stalls.
+  useEffect(() => {
+    if (!anyRunning) return undefined;
+    const tick = setInterval(() => {
+      const now = Date.now() / 1000;
+      setTimers((all) => {
+        const next = { ...all };
+        for (const key of Object.keys(next)) {
+          const t = next[Number(key)];
+          if (!t.running || t.endAt === null) continue;
+          const left = t.endAt - now;
+          next[Number(key)] = left <= 0 ? { ...t, left: 0, running: false, ringing: true, endAt: null } : { ...t, left };
+        }
+        return next;
+      });
+    }, 250);
+    return () => clearInterval(tick);
+  }, [anyRunning]);
+
+  // Ring while any timer has finished and hasn't been stopped.
+  useEffect(() => {
+    if (anyRinging) startAlarm();
+    else stopAlarm();
+  }, [anyRinging]);
+  useEffect(() => () => stopAlarm(), []);
 
   useFocusEffect(
     useCallback(() => {
@@ -99,6 +80,7 @@ export default function CookScreen() {
           setRecipe(result);
           setStepIndex(0);
           setFinale(null);
+          setTimers({});
           earnedRef.current = 0;
           setLoading(false);
         }
@@ -131,9 +113,43 @@ export default function CookScreen() {
   const isLast = stepIndex === steps.length - 1;
   const ingredients = listStepIngredients(step, recipe.ingredients);
   const sceneKind = getPaperSceneKind(step);
-  const timer = stepTimerMinutes(step.text);
+  const mentioned = stepTimerMinutes(step.text);
+  const timerMinutes = mentioned ?? SUGGESTED_MINUTES[sceneKind] ?? null;
+  const fresh = (minutes: number): TimerState => ({
+    step: stepIndex,
+    total: Math.round(minutes * 60),
+    left: Math.round(minutes * 60),
+    running: false,
+    ringing: false,
+    endAt: null,
+  });
+  const stepTimer = timerMinutes !== null ? (timers[stepIndex] ?? fresh(timerMinutes)) : null;
+  const sceneSize = Math.min(width - 24, height * (stepTimer ? 0.32 : 0.38), 400);
+  const otherTimers = Object.values(timers).filter((t) => t.step !== stepIndex && (t.running || t.ringing));
+
+  function updateTimer(change: (t: TimerState) => TimerState) {
+    if (!stepTimer) return;
+    setTimers((all) => ({ ...all, [stepIndex]: change(all[stepIndex] ?? stepTimer) }));
+  }
+  function toggleTimer() {
+    updateTimer((t) =>
+      t.running
+        ? { ...t, running: false, endAt: null }
+        : { ...t, running: true, endAt: Date.now() / 1000 + (t.left > 0 ? t.left : t.total), left: t.left > 0 ? t.left : t.total },
+    );
+  }
+  function adjustTimer(delta: number) {
+    updateTimer((t) => {
+      const total = Math.max(60, t.total + delta);
+      const left = Math.max(0, Math.min(total, t.left + delta));
+      return { ...t, total, left: t.left === t.total ? total : left };
+    });
+  }
+  function stopRing(stepKey: number) {
+    setTimers((all) => ({ ...all, [stepKey]: { ...all[stepKey], ringing: false, left: all[stepKey].total } }));
+  }
   const stepXp = XP_PER_STEP + (isLast ? XP_RECIPE_BONUS : 0) + (gameDone ? GAME_BONUS_XP : 0);
-  const sceneSize = Math.min(width - 24, height * 0.38, 400);
+
 
   async function handleDone() {
     if (busy) return;
@@ -168,7 +184,19 @@ export default function CookScreen() {
           </PaperCard>
         </Pressable>
         <View style={styles.topRight}>
-          {timer ? <StepTimer key={`${stepIndex}-${timer}`} minutes={timer} /> : null}
+          {otherTimers.map((t) => (
+            <TimerPill
+              key={t.step}
+              timer={t}
+              onPress={() => {
+                if (t.ringing) stopRing(t.step);
+                else {
+                  setGameDone(false);
+                  setStepIndex(t.step);
+                }
+              }}
+            />
+          ))}
           <PaperCard color={paper.green} shape="c" tilt={2} lift={3} contentStyle={styles.xpChip}>
             <Text style={styles.xpChipText}>+{stepXp} XP</Text>
           </PaperCard>
@@ -197,6 +225,18 @@ export default function CookScreen() {
       </View>
 
       <View style={[styles.cardWrap, { paddingBottom: Math.max(insets.bottom, 14) }]}>
+        {stepTimer ? (
+          <Animated.View key={`timer-${stepIndex}`} entering={ZoomIn.springify().damping(13)} style={styles.timerWrap}>
+            <KitchenTimer
+              timer={stepTimer}
+              suggested={mentioned === null}
+              onToggle={toggleTimer}
+              onAdjust={adjustTimer}
+              onReset={() => updateTimer((t) => ({ ...t, running: false, ringing: false, endAt: null, left: t.total }))}
+              onStopRing={() => stopRing(stepIndex)}
+            />
+          </Animated.View>
+        ) : null}
         <PaperCard shape="d" lift={6} contentStyle={styles.card}>
           <View style={styles.progress}>
             {steps.map((_, i) => (
@@ -252,6 +292,7 @@ export default function CookScreen() {
             setFinale(null);
             earnedRef.current = 0;
             setGameDone(false);
+            setTimers({});
             setStepIndex(0);
           }}
         />
@@ -268,6 +309,10 @@ const styles = StyleSheet.create({
   },
   cardWrap: {
     paddingHorizontal: 12,
+  },
+  timerWrap: {
+    marginBottom: 12,
+    paddingHorizontal: 6,
   },
   centered: {
     alignItems: 'center',
