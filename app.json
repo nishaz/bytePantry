@@ -28,6 +28,13 @@
       "expo-router",
       "expo-sqlite",
       "expo-font"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "caef5a50-8e44-499d-90d4-2b5a3aeebb4c"
+      }
+    },
+    "owner": "nishax.zz"
   }
 }
