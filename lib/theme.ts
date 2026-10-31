@@ -82,6 +82,14 @@ export function formatSource(source: string): string {
       return 'Voice note';
     case 'link':
       return 'From a link';
+    case 'tiktok':
+      return 'From TikTok';
+    case 'instagram':
+      return 'From Instagram';
+    case 'youtube':
+      return 'From YouTube';
+    case 'website':
+      return 'From the web';
     case 'sample':
       return 'Starter recipe';
     default:

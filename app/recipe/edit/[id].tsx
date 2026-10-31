@@ -57,7 +57,12 @@ export default function EditRecipeScreen() {
           {!loading && !recipe ? <Text style={styles.missing}>Recipe not found.</Text> : null}
           {recipe ? (
             <RecipeForm
-              initial={{ title: recipe.title, ingredients: recipe.ingredients, steps: recipe.steps }}
+              initial={{
+                title: recipe.title,
+                ingredients: recipe.ingredients,
+                steps: recipe.steps,
+                servings: recipe.servings ?? undefined,
+              }}
               submitLabel="Save changes"
               onSubmit={save}
             />

@@ -1,6 +1,6 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -10,11 +10,13 @@ import { Bob, dealIn } from '../../components/paper/Motion';
 import { PaperBackground } from '../../components/paper/PaperBackground';
 import { PaperButton } from '../../components/paper/PaperButton';
 import { PaperCard } from '../../components/paper/PaperCard';
-import { BackIcon, CheckIcon, PencilIcon, TrashIcon } from '../../components/paper/UiIcons';
+import { BackIcon, CheckIcon, LinkIcon, PencilIcon, TrashIcon } from '../../components/paper/UiIcons';
+import { ServingsStepper } from '../../components/recipe/RecipeForm';
 import { deleteRecipe, getRecipe } from '../../lib/db';
 import { listFridgeItems } from '../../lib/fridgeDb';
 import { matchRecipe } from '../../lib/pantryMatch';
 import { XP_PER_STEP, XP_RECIPE_BONUS } from '../../lib/profile';
+import { DEFAULT_SERVINGS, scaleIngredient } from '../../lib/scaleIngredients';
 import { getPaperSceneKind } from '../../lib/stepSceneLayout';
 import { cutCorners, estimateRecipeMinutes, fonts, formatSource, paper } from '../../lib/theme';
 import type { FridgeItem } from '../../types/fridge';
@@ -37,6 +39,7 @@ export default function RecipeOverviewScreen() {
   const [fridge, setFridge] = useState<FridgeItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [people, setPeople] = useState<number | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -46,6 +49,7 @@ export default function RecipeOverviewScreen() {
         if (active) {
           setRecipe(r);
           setFridge(f);
+          setPeople((current) => current ?? r?.servings ?? DEFAULT_SERVINGS);
           setLoading(false);
         }
       })();
@@ -78,6 +82,9 @@ export default function RecipeOverviewScreen() {
   const lightBg = color === paper.yellow || color === paper.blue || color === paper.orange;
   const fg = lightBg ? paper.ink : paper.card;
   const totalXp = recipe.steps.length * XP_PER_STEP + XP_RECIPE_BONUS;
+  const baseServings = recipe.servings ?? DEFAULT_SERVINGS;
+  const serves = people ?? baseServings;
+  const factor = serves / baseServings;
 
   async function remove() {
     if (!recipe) return;
@@ -136,6 +143,20 @@ export default function RecipeOverviewScreen() {
           </PaperCard>
         </Animated.View>
 
+        <PaperCard shape="b" lift={3} contentStyle={styles.servesCard}>
+          <View style={styles.flex}>
+            <Text style={styles.servesLabel}>Cooking for</Text>
+            {serves !== baseServings ? (
+              <Pressable accessibilityRole="button" onPress={() => setPeople(baseServings)} hitSlop={8}>
+                <Text style={styles.servesReset}>Recipe makes {baseServings} · reset</Text>
+              </Pressable>
+            ) : (
+              <Text style={styles.servesHint}>Amounts update as you change it</Text>
+            )}
+          </View>
+          <ServingsStepper value={serves} onChange={setPeople} compact />
+        </PaperCard>
+
         <View>
           <View style={styles.sectionHead}>
             <Text style={styles.section}>Ingredients</Text>
@@ -150,8 +171,8 @@ export default function RecipeOverviewScreen() {
                 <Animated.View key={`${name}-${i}`} entering={ZoomIn.delay(120 + i * 50).springify().damping(12)} style={styles.ingCell}>
                   <PaperCard shape={i % 2 ? 'b' : 'c'} tilt={i % 2 ? 1.5 : -1.5} lift={3} contentStyle={styles.ing}>
                     <IngredientArt name={name} size={44} />
-                    <Text style={styles.ingName} numberOfLines={2}>
-                      {name}
+                    <Text style={styles.ingName} numberOfLines={3}>
+                      {scaleIngredient(name, factor)}
                     </Text>
                     <View style={[styles.ingBadge, { backgroundColor: have ? paper.green : paper.kraftDeep }]}>
                       {have ? <CheckIcon size={12} /> : <Text style={styles.needText}>need</Text>}
@@ -162,6 +183,19 @@ export default function RecipeOverviewScreen() {
             })}
           </View>
         </View>
+
+        {recipe.sourceUrl ? (
+          <Pressable
+            accessibilityRole="link"
+            onPress={() => recipe.sourceUrl && Linking.openURL(recipe.sourceUrl)}
+            style={styles.original}
+          >
+            <LinkIcon size={18} color={paper.inkSoft} />
+            <Text style={styles.originalText} numberOfLines={1}>
+              Open the original post
+            </Text>
+          </Pressable>
+        ) : null}
 
         <View>
           <Text style={[styles.section, styles.sectionGap]}>Steps</Text>
@@ -189,7 +223,11 @@ export default function RecipeOverviewScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 14) }]}>
-        <PaperButton label="Start cooking" size="lg" onPress={() => router.push(`/cook/${recipe.id}`)} />
+        <PaperButton
+          label={`Start cooking for ${serves}`}
+          size="lg"
+          onPress={() => router.push({ pathname: '/cook/[id]', params: { id: recipe.id, serves: String(serves) } })}
+        />
       </View>
 
       {confirmDelete ? (
@@ -219,6 +257,40 @@ export default function RecipeOverviewScreen() {
 }
 
 const styles = StyleSheet.create({
+  original: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  originalText: {
+    color: paper.inkSoft,
+    fontFamily: fonts.bodyBold,
+    fontSize: 14,
+    textDecorationLine: 'underline',
+  },
+  servesCard: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  servesHint: {
+    color: paper.inkSoft,
+    fontFamily: fonts.body,
+    fontSize: 12.5,
+  },
+  servesLabel: {
+    color: paper.ink,
+    fontFamily: fonts.display,
+    fontSize: 19,
+  },
+  servesReset: {
+    color: paper.redDeep,
+    fontFamily: fonts.bodyBold,
+    fontSize: 12.5,
+    textDecorationLine: 'underline',
+  },
   backdrop: {
     alignItems: 'center',
     backgroundColor: 'rgba(43,35,32,0.4)',
@@ -320,7 +392,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodyBold,
     fontSize: 12.5,
     textAlign: 'center',
-    textTransform: 'capitalize',
   },
   missing: {
     color: paper.ink,

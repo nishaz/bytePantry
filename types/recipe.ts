@@ -13,6 +13,10 @@ export interface Recipe {
   ingredients: string[];
   steps: Step[];
   source: string;
+  /** Original link the recipe was imported from, if any. */
+  sourceUrl?: string | null;
+  /** How many people the recipe was written for. */
+  servings?: number | null;
   createdAt: number;
 }
 
@@ -22,5 +26,7 @@ export interface RecipeRow {
   ingredients: string;
   steps: string;
   source: string;
+  sourceUrl?: string | null;
+  servings?: number | null;
   createdAt: number;
 }

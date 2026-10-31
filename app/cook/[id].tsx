@@ -15,15 +15,15 @@ import { BackIcon } from '../../components/paper/UiIcons';
 import { getRecipe } from '../../lib/db';
 import { awardXp, getProfile, XP_PER_STEP, XP_RECIPE_BONUS } from '../../lib/profile';
 import { listStepIngredients } from '../../lib/stepIngredients';
-import { getPaperSceneKind, stepTimerMinutes } from '../../lib/stepSceneLayout';
+import { getPaperSceneKind, stepTimer as stepTimerFor } from '../../lib/stepSceneLayout';
 import { cutCorners, fonts, paper } from '../../lib/theme';
 import { startAlarm, stopAlarm } from '../../lib/timerAlarm';
+import { DEFAULT_SERVINGS, scaleIngredient } from '../../lib/scaleIngredients';
 import type { Recipe } from '../../types/recipe';
 
-const SUGGESTED_MINUTES: Partial<Record<string, number>> = { oven: 20, pot: 10, pan: 5 };
 
 export default function CookScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, serves } = useLocalSearchParams<{ id: string; serves?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -112,9 +112,12 @@ export default function CookScreen() {
   const step = steps[stepIndex];
   const isLast = stepIndex === steps.length - 1;
   const ingredients = listStepIngredients(step, recipe.ingredients);
+  const baseServings = recipe.servings ?? DEFAULT_SERVINGS;
+  const people = Number(serves) > 0 ? Number(serves) : baseServings;
+  const factor = people / baseServings;
   const sceneKind = getPaperSceneKind(step);
-  const mentioned = stepTimerMinutes(step.text);
-  const timerMinutes = mentioned ?? SUGGESTED_MINUTES[sceneKind] ?? null;
+  const timerInfo = stepTimerFor(step.text);
+  const timerMinutes = timerInfo?.minutes ?? null;
   const fresh = (minutes: number): TimerState => ({
     step: stepIndex,
     total: Math.round(minutes * 60),
@@ -209,7 +212,7 @@ export default function CookScreen() {
             <Animated.View key={`${stepIndex}-${name}`} entering={ZoomIn.delay(i * 70).springify().damping(12)}>
               <PaperCard shape={i % 2 ? 'b' : 'c'} tilt={i % 2 ? 2 : -2} lift={2} contentStyle={styles.ingChip}>
                 <IngredientArt name={name} size={28} shadow={false} />
-                <Text style={styles.ingText}>{name}</Text>
+                <Text style={styles.ingText}>{scaleIngredient(name, factor)}</Text>
               </PaperCard>
             </Animated.View>
           ))}
@@ -229,7 +232,7 @@ export default function CookScreen() {
           <Animated.View key={`timer-${stepIndex}`} entering={ZoomIn.springify().damping(13)} style={styles.timerWrap}>
             <KitchenTimer
               timer={stepTimer}
-              suggested={mentioned === null}
+              note={timerInfo?.note ?? ''}
               onToggle={toggleTimer}
               onAdjust={adjustTimer}
               onReset={() => updateTimer((t) => ({ ...t, running: false, ringing: false, endAt: null, left: t.total }))}
@@ -252,6 +255,7 @@ export default function CookScreen() {
           </View>
           <Text style={styles.meta} numberOfLines={1}>
             {recipe.title} · Step {stepIndex + 1} of {steps.length}
+            {people !== baseServings ? ` · for ${people}` : ''}
           </Text>
           <Animated.Text key={`text-${stepIndex}`} entering={FadeInRight.springify().damping(16)} style={styles.stepText}>
             {step.text}
@@ -348,7 +352,6 @@ const styles = StyleSheet.create({
     color: paper.ink,
     fontFamily: fonts.bodyBold,
     fontSize: 13,
-    textTransform: 'capitalize',
   },
   meta: {
     color: paper.inkSoft,

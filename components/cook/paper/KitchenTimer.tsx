@@ -62,14 +62,15 @@ function Dial({ ratio, size }: { ratio: number; size: number }) {
 
 interface KitchenTimerProps {
   timer: TimerState;
-  suggested: boolean;
+  /** Shown while the timer is idle, e.g. "Per side · usual time". */
+  note: string;
   onToggle: () => void;
   onAdjust: (deltaSeconds: number) => void;
   onReset: () => void;
   onStopRing: () => void;
 }
 
-export function KitchenTimer({ timer, suggested, onToggle, onAdjust, onReset, onStopRing }: KitchenTimerProps) {
+export function KitchenTimer({ timer, note, onToggle, onAdjust, onReset, onStopRing }: KitchenTimerProps) {
   const shake = useSharedValue(0);
   useEffect(() => {
     if (timer.ringing) {
@@ -108,8 +109,8 @@ export function KitchenTimer({ timer, suggested, onToggle, onAdjust, onReset, on
       </Animated.View>
       <View style={styles.flex}>
         <Text style={styles.clock}>{formatClock(timer.left)}</Text>
-        <Text style={styles.sub}>
-          {timer.running ? 'Cooking…' : idle ? (suggested ? 'Suggested time' : 'Timer ready') : 'Paused'}
+        <Text style={styles.sub} numberOfLines={2}>
+          {timer.running ? 'Cooking…' : idle ? note || 'Timer ready' : 'Paused'}
         </Text>
       </View>
       <View style={styles.controls}>

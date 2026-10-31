@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -11,22 +11,78 @@ import { PaperCard } from '../../components/paper/PaperCard';
 import { LinkIcon, MicIcon, PencilIcon } from '../../components/paper/UiIcons';
 import { RecipeForm, type RecipeDraft } from '../../components/recipe/RecipeForm';
 import { createRecipeId, saveRecipe } from '../../lib/db';
+import { ImportError, importRecipeFromLink } from '../../lib/importRecipe';
+import { parseFreeTextRecipe } from '../../lib/recipeParse';
+import { parseServings } from '../../lib/scaleIngredients';
+import { inferAction } from '../../lib/stepSceneLayout';
 import { cutCorners, fonts, paper } from '../../lib/theme';
 
 export default function AddScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [link, setLink] = useState('');
-  const [linkNote, setLinkNote] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [voiceNote, setVoiceNote] = useState(false);
   const [formKey, setFormKey] = useState(0);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState('');
+  const [importNote, setImportNote] = useState('');
+  const [prefill, setPrefill] = useState<Partial<RecipeDraft> | undefined>(undefined);
+  const [imported, setImported] = useState<{ source: string; sourceUrl: string } | null>(null);
+  const [pasteText, setPasteText] = useState('');
+
+  function fillForm(draft: { title: string; ingredients: string[]; steps: string[]; servings: number | null }) {
+    setPrefill({
+      title: draft.title,
+      ingredients: draft.ingredients,
+      steps: draft.steps.map((text) => ({ text, action: inferAction(text), ingredient: '', tool: '' })),
+      servings: draft.servings ?? undefined,
+    });
+    setFormKey((k) => k + 1);
+    setShowForm(true);
+  }
+
+  async function runImport() {
+    setImporting(true);
+    setImportError('');
+    setImportNote('');
+    try {
+      const result = await importRecipeFromLink(link);
+      setImported({ source: result.source, sourceUrl: result.sourceUrl });
+      fillForm(result);
+      setImportNote(
+        result.complete
+          ? 'Imported! Give it a quick check, then save.'
+          : 'Got part of it. Fill in what is missing, then save.',
+      );
+    } catch (e) {
+      setImportError(e instanceof ImportError ? e.message : 'Something went wrong reading that link.');
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  function fillFromText() {
+    const parsed = parseFreeTextRecipe(pasteText, 'My recipe');
+    fillForm({ ...parsed, servings: parseServings(pasteText) });
+    setImportError('');
+    setImportNote('Filled in from your text. Check it over, then save.');
+  }
 
   async function save(draft: RecipeDraft) {
     const id = createRecipeId();
-    await saveRecipe({ id, ...draft, source: link.trim() ? 'link' : 'manual', createdAt: Date.now() });
+    await saveRecipe({
+      id,
+      ...draft,
+      source: imported?.source ?? (link.trim() ? 'link' : 'manual'),
+      sourceUrl: imported?.sourceUrl ?? (link.trim() || null),
+      createdAt: Date.now(),
+    });
     setLink('');
-    setLinkNote(false);
+    setImported(null);
+    setImportNote('');
+    setPrefill(undefined);
+    setPasteText('');
     setShowForm(false);
     setFormKey((k) => k + 1);
     router.push(`/cook/${id}`);
@@ -60,8 +116,9 @@ export default function AddScreen() {
                 value={link}
                 onChangeText={(t) => {
                   setLink(t);
-                  setLinkNote(false);
+                  setImportError('');
                 }}
+                onSubmitEditing={() => link.trim() && runImport()}
                 placeholder="https://…"
                 placeholderTextColor={paper.inkSoft}
                 autoCapitalize="none"
@@ -71,21 +128,47 @@ export default function AddScreen() {
                 accessibilityLabel="Recipe link"
               />
               <PaperButton
-                label="Import"
+                label={importing ? '' : 'Import'}
+                icon={importing ? <ActivityIndicator color={paper.card} /> : undefined}
                 color={paper.ink}
                 size="sm"
-                disabled={!link.trim()}
-                onPress={() => {
-                  setLinkNote(true);
-                  setShowForm(true);
-                }}
+                disabled={!link.trim() || importing}
+                onPress={runImport}
               />
             </View>
-            {linkNote ? (
+            {importing ? (
+              <Animated.View entering={FadeIn} style={styles.reading}>
+                <Bob distance={3} rock={6} duration={500}>
+                  <PencilIcon size={20} color={paper.card} />
+                </Bob>
+                <Text style={styles.linkNote}>Reading the recipe…</Text>
+              </Animated.View>
+            ) : null}
+            {importNote ? (
               <Animated.View entering={FadeIn}>
-                <Text style={styles.linkNote}>
-                  Automatic import isn't connected yet. Your link is saved with the recipe; type the details below.
-                </Text>
+                <Text style={styles.linkNote}>{importNote}</Text>
+              </Animated.View>
+            ) : null}
+            {importError ? (
+              <Animated.View entering={FadeIn} style={[styles.errorBox, cutCorners.c]}>
+                <Text style={styles.errorText}>{importError}</Text>
+                <TextInput
+                  value={pasteText}
+                  onChangeText={setPasteText}
+                  placeholder="Paste the caption or recipe text here"
+                  placeholderTextColor={paper.inkSoft}
+                  multiline
+                  style={[styles.pasteInput, cutCorners.b]}
+                  accessibilityLabel="Recipe text to fill in from"
+                />
+                <PaperButton
+                  label="Fill in from text"
+                  color={paper.yellow}
+                  textColor={paper.ink}
+                  size="sm"
+                  disabled={!pasteText.trim()}
+                  onPress={fillFromText}
+                />
               </Animated.View>
             ) : null}
           </PaperCard>
@@ -121,7 +204,7 @@ export default function AddScreen() {
 
           {showForm ? (
             <Animated.View entering={FadeInDown.springify().damping(15)}>
-              <RecipeForm key={formKey} submitLabel="Save & start cooking" onSubmit={save} />
+              <RecipeForm key={formKey} initial={prefill} submitLabel="Save & start cooking" onSubmit={save} />
             </Animated.View>
           ) : null}
         </ScrollView>
@@ -174,6 +257,31 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     fontSize: 15,
     minHeight: 40,
+  },
+  errorBox: {
+    backgroundColor: paper.card,
+    gap: 10,
+    padding: 12,
+  },
+  errorText: {
+    color: paper.redDeep,
+    fontFamily: fonts.bodyBold,
+    fontSize: 13.5,
+  },
+  pasteInput: {
+    backgroundColor: paper.kraft,
+    color: paper.ink,
+    fontFamily: fonts.body,
+    fontSize: 14,
+    minHeight: 90,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    textAlignVertical: 'top',
+  },
+  reading: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
   },
   linkNote: {
     color: paper.card,

@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
+import { DEFAULT_SERVINGS } from '../../lib/scaleIngredients';
 import { inferAction } from '../../lib/stepSceneLayout';
 import { cutCorners, fonts, paper } from '../../lib/theme';
 import type { Step } from '../../types/recipe';
@@ -13,6 +14,7 @@ export interface RecipeDraft {
   title: string;
   ingredients: string[];
   steps: Step[];
+  servings: number;
 }
 
 function parseIngredients(raw: string): string[] {
@@ -33,15 +35,16 @@ function parseSteps(raw: string, previous: Step[]): Step[] {
 }
 
 interface RecipeFormProps {
-  initial?: RecipeDraft;
+  initial?: Partial<RecipeDraft>;
   submitLabel: string;
   onSubmit: (draft: RecipeDraft) => Promise<void>;
 }
 
 export function RecipeForm({ initial, submitLabel, onSubmit }: RecipeFormProps) {
   const [title, setTitle] = useState(initial?.title ?? '');
-  const [ingredientsText, setIngredientsText] = useState(initial?.ingredients.join('\n') ?? '');
-  const [stepsText, setStepsText] = useState(initial?.steps.map((s) => s.text).join('\n') ?? '');
+  const [servings, setServings] = useState(initial?.servings ?? DEFAULT_SERVINGS);
+  const [ingredientsText, setIngredientsText] = useState(initial?.ingredients?.join('\n') ?? '');
+  const [stepsText, setStepsText] = useState(initial?.steps?.map((s) => s.text).join('\n') ?? '');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -61,7 +64,7 @@ export function RecipeForm({ initial, submitLabel, onSubmit }: RecipeFormProps) 
     setError('');
     setSaving(true);
     try {
-      await onSubmit({ title: trimmed, ingredients, steps });
+      await onSubmit({ title: trimmed, ingredients, steps, servings });
     } catch (e) {
       console.error(e);
       setError('Could not save the recipe. Please try again.');
@@ -82,11 +85,14 @@ export function RecipeForm({ initial, submitLabel, onSubmit }: RecipeFormProps) 
         accessibilityLabel="Recipe name"
       />
 
-      <Text style={styles.label}>Ingredients</Text>
+      <Text style={styles.label}>Serves</Text>
+      <ServingsStepper value={servings} onChange={setServings} />
+
+      <Text style={styles.label}>Ingredients (with amounts, for this many people)</Text>
       <TextInput
         value={ingredientsText}
         onChangeText={setIngredientsText}
-        placeholder="flour, eggs, milk"
+        placeholder={'200g flour\n2 eggs\n300ml milk'}
         placeholderTextColor={paper.inkSoft}
         multiline
         style={[styles.input, styles.multiline, cutCorners.c]}
@@ -123,7 +129,72 @@ export function RecipeForm({ initial, submitLabel, onSubmit }: RecipeFormProps) 
   );
 }
 
+/** − 2 people + control, shared by the form and the recipe page. */
+export function ServingsStepper({ value, onChange, compact }: { value: number; onChange: (n: number) => void; compact?: boolean }) {
+  return (
+    <View style={styles.stepper}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Fewer people"
+        disabled={value <= 1}
+        onPress={() => onChange(Math.max(1, value - 1))}
+        style={[styles.stepBtn, cutCorners.b, value <= 1 && styles.stepDisabled, compact && styles.stepBtnCompact]}
+      >
+        <Text style={styles.stepBtnText}>−</Text>
+      </Pressable>
+      <Text style={[styles.stepValue, compact && styles.stepValueCompact]} accessibilityLiveRegion="polite">
+        {value} {value === 1 ? 'person' : 'people'}
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="More people"
+        disabled={value >= 24}
+        onPress={() => onChange(Math.min(24, value + 1))}
+        style={[styles.stepBtn, cutCorners.c, compact && styles.stepBtnCompact]}
+      >
+        <Text style={styles.stepBtnText}>+</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  stepBtn: {
+    alignItems: 'center',
+    backgroundColor: paper.yellow,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  stepBtnCompact: {
+    height: 38,
+    width: 38,
+  },
+  stepBtnText: {
+    color: paper.ink,
+    fontFamily: fonts.bodyBold,
+    fontSize: 22,
+    lineHeight: 26,
+  },
+  stepDisabled: {
+    opacity: 0.4,
+  },
+  stepValue: {
+    color: paper.ink,
+    fontFamily: fonts.display,
+    fontSize: 20,
+    minWidth: 104,
+    textAlign: 'center',
+  },
+  stepValueCompact: {
+    fontSize: 17,
+    minWidth: 92,
+  },
+  stepper: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
   error: {
     color: paper.redDeep,
     fontFamily: fonts.bodyBold,

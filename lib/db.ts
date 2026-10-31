@@ -10,6 +10,8 @@ function rowToRecipe(row: RecipeRow): Recipe {
     ingredients: JSON.parse(row.ingredients) as string[],
     steps: JSON.parse(row.steps) as Step[],
     source: row.source,
+    sourceUrl: row.sourceUrl ?? null,
+    servings: row.servings ?? null,
     createdAt: row.createdAt,
   };
 }
@@ -17,7 +19,8 @@ function rowToRecipe(row: RecipeRow): Recipe {
 const STARTER_RECIPES: Omit<Recipe, 'id' | 'createdAt'>[] = [
   {
     title: 'Spinach omelette',
-    ingredients: ['eggs', 'spinach', 'cheese', 'milk', 'butter'],
+    ingredients: ['2 eggs', '1 handful spinach', '30g cheese', '1 tbsp milk', '1 tsp butter'],
+    servings: 1,
     steps: [
       { text: 'Whisk the eggs with a splash of milk', action: 'mix', ingredient: 'eggs, milk', tool: 'bowl' },
       { text: 'Melt the butter and wilt the spinach', action: 'fry', ingredient: 'butter, spinach', tool: 'pan' },
@@ -28,7 +31,8 @@ const STARTER_RECIPES: Omit<Recipe, 'id' | 'createdAt'>[] = [
   },
   {
     title: 'Garlic tomato pasta',
-    ingredients: ['pasta', 'tomato', 'garlic', 'onion', 'olive oil', 'cheese'],
+    ingredients: ['200g pasta', '3 tomatoes', '2 cloves garlic', '1 onion', '2 tbsp olive oil', '40g cheese'],
+    servings: 2,
     steps: [
       { text: 'Chop the onion and garlic', action: 'chop', ingredient: 'onion, garlic', tool: 'cutting board' },
       { text: 'Fry the garlic and onion in olive oil', action: 'fry', ingredient: 'garlic, onion, olive oil', tool: 'pan' },
@@ -48,12 +52,13 @@ async function seedStarterRecipes(): Promise<void> {
     for (const recipe of STARTER_RECIPES) {
       t -= 1000;
       await db.runAsync(
-        `INSERT INTO recipes (id, title, ingredients, steps, source, createdAt) VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO recipes (id, title, ingredients, steps, source, servings, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)`,
         createRecipeId(),
         recipe.title,
         JSON.stringify(recipe.ingredients),
         JSON.stringify(recipe.steps),
         recipe.source,
+        recipe.servings ?? null,
         t,
       );
     }
@@ -76,6 +81,13 @@ export async function initDb(): Promise<void> {
             createdAt INTEGER NOT NULL
           );
         `);
+        const columns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(recipes)');
+        if (!columns.some((c) => c.name === 'sourceUrl')) {
+          await db.execAsync('ALTER TABLE recipes ADD COLUMN sourceUrl TEXT');
+        }
+        if (!columns.some((c) => c.name === 'servings')) {
+          await db.execAsync('ALTER TABLE recipes ADD COLUMN servings INTEGER');
+        }
       });
       await initFridgeTable();
       await initProfileTable();
@@ -91,13 +103,15 @@ export async function initDb(): Promise<void> {
 export async function saveRecipe(recipe: Recipe): Promise<void> {
   await runDb((db) =>
     db.runAsync(
-      `INSERT OR REPLACE INTO recipes (id, title, ingredients, steps, source, createdAt)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO recipes (id, title, ingredients, steps, source, sourceUrl, servings, createdAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       recipe.id,
       recipe.title,
       JSON.stringify(recipe.ingredients),
       JSON.stringify(recipe.steps),
       recipe.source,
+      recipe.sourceUrl ?? null,
+      recipe.servings ?? null,
       recipe.createdAt,
     ),
   );
