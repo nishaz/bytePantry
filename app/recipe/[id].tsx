@@ -6,12 +6,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DishArt, dishColor, dishKindFor } from '../../components/paper/DishArt';
 import { IngredientArt } from '../../components/paper/IngredientArt';
-import { Bob, dealIn, popIn, tileIn } from '../../components/paper/Motion';
+import { popIn } from '../../components/paper/Motion';
 import { PaperBackground } from '../../components/paper/PaperBackground';
 import { PaperButton } from '../../components/paper/PaperButton';
 import { PaperCard } from '../../components/paper/PaperCard';
 import { BackIcon, CheckIcon, LinkIcon, PencilIcon, ShareIcon, TrashIcon } from '../../components/paper/UiIcons';
-import { CollectibleCard, LockedCard } from '../../components/recipe/CollectibleCard';
+import { CollectibleCard, LockedCard, rarityFor } from '../../components/recipe/CollectibleCard';
 import { ServingsStepper } from '../../components/recipe/RecipeForm';
 import { CARD_UNLOCK_COOKS, deleteRecipe, getRecipe, listRecipes } from '../../lib/db';
 import { listFridgeItems } from '../../lib/fridgeDb';
@@ -20,7 +20,7 @@ import { matchRecipe } from '../../lib/pantryMatch';
 import { XP_PER_STEP, XP_RECIPE_BONUS } from '../../lib/profile';
 import { DEFAULT_SERVINGS, scaleIngredient } from '../../lib/scaleIngredients';
 import { shareCard } from '../../lib/shareCard';
-import { getPaperSceneKind } from '../../lib/stepSceneLayout';
+import { getPaperSceneKind, stepTimer } from '../../lib/stepSceneLayout';
 import { cutCorners, estimateRecipeMinutes, fonts, formatSource, paper } from '../../lib/theme';
 import type { FridgeItem } from '../../types/fridge';
 import type { Recipe } from '../../types/recipe';
@@ -44,6 +44,7 @@ export default function RecipeOverviewScreen() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [people, setPeople] = useState<number | null>(null);
   const [cardNumber, setCardNumber] = useState(1);
+  const [cardOpen, setCardOpen] = useState(card === '1');
   const scrollRef = useRef<ScrollView>(null);
   const cardRef = useRef<View>(null);
 
@@ -58,7 +59,10 @@ export default function RecipeOverviewScreen() {
           // Card numbers follow the order recipes were added: your first recipe is #001.
           const oldestFirst = [...all].sort((a, b) => a.createdAt - b.createdAt);
           setCardNumber(Math.max(1, oldestFirst.findIndex((x) => x.id === id) + 1));
-          if (card === '1') setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 500);
+          if (card === '1') {
+            setCardOpen(true);
+            setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 500);
+          }
           setPeople((current) => current ?? r?.servings ?? DEFAULT_SERVINGS);
           setLoading(false);
         }
@@ -99,7 +103,17 @@ export default function RecipeOverviewScreen() {
   const unlocked = cooks >= CARD_UNLOCK_COOKS;
   const nutrition = recipe.nutrition ?? estimateNutrition(recipe.ingredients, baseServings);
   const minutes = estimateRecipeMinutes(recipe.steps.length);
-  const share = () => shareCard(cardRef, recipe.title, nutrition, cooks);
+  // The card has to be on screen to be captured as an image, so open it first if it's folded away.
+  const share = () => {
+    if (!cardOpen) {
+      setCardOpen(true);
+      setTimeout(() => shareCard(cardRef, recipe.title, nutrition, cooks), 450);
+    } else {
+      shareCard(cardRef, recipe.title, nutrition, cooks);
+    }
+  };
+  const rarity = rarityFor(cooks);
+  const rarityLabel = { bronze: '★ Bronze', silver: '★★ Silver', gold: '★★★ Gold', holo: '★★★★ Holo' }[rarity];
 
   async function remove() {
     if (!recipe) return;
@@ -111,7 +125,7 @@ export default function RecipeOverviewScreen() {
     <PaperBackground>
       <ScrollView
         ref={scrollRef}
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 120 }]}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 96 }]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.topBar}>
@@ -146,22 +160,23 @@ export default function RecipeOverviewScreen() {
         </View>
 
         <Animated.View entering={popIn()}>
-          <PaperCard color={color} shape="d" tilt={-1} lift={6} contentStyle={styles.hero}>
-            <Bob distance={6} rock={3} style={styles.heroArt}>
-              <DishArt title={recipe.title} size={150} />
-            </Bob>
-            <Text style={[styles.title, { color: fg }]}>{recipe.title}</Text>
-            <View style={styles.statRow}>
-              {[
-                `${minutes} min`,
-                `${recipe.steps.length} steps`,
-                `+${totalXp} XP`,
-                formatSource(recipe.source),
-              ].map((stat) => (
-                <View key={stat} style={[styles.stat, cutCorners.b]}>
-                  <Text style={styles.statText}>{stat}</Text>
+          <PaperCard color={color} shape="d" lift={4} contentStyle={styles.hero}>
+            <DishArt title={recipe.title} size={84} />
+            <View style={styles.flex}>
+              <Text style={[styles.title, { color: fg }]} numberOfLines={3}>
+                {recipe.title}
+              </Text>
+              <Text style={[styles.heroMeta, { color: fg }]}>
+                {minutes} min · {recipe.steps.length} steps · {nutrition.calories} kcal
+              </Text>
+              <View style={styles.statRow}>
+                <View style={[styles.stat, cutCorners.b]}>
+                  <Text style={styles.statText}>+{totalXp} XP</Text>
                 </View>
-              ))}
+                <View style={[styles.stat, styles.statSoft, cutCorners.c]}>
+                  <Text style={styles.statText}>{formatSource(recipe.source)}</Text>
+                </View>
+              </View>
             </View>
           </PaperCard>
         </Animated.View>
@@ -191,17 +206,19 @@ export default function RecipeOverviewScreen() {
             {recipe.ingredients.map((name, i) => {
               const have = !missing.has(name);
               return (
-                <Animated.View key={`${name}-${i}`} entering={tileIn(i)} style={styles.ingCell}>
-                  <PaperCard shape={i % 2 ? 'b' : 'c'} tilt={i % 2 ? 1.5 : -1.5} lift={3} contentStyle={styles.ing}>
-                    <IngredientArt name={name} size={44} />
-                    <Text style={styles.ingName} numberOfLines={3}>
-                      {scaleIngredient(name, factor)}
-                    </Text>
-                    <View style={[styles.ingBadge, { backgroundColor: have ? paper.green : paper.kraftDeep }]}>
-                      {have ? <CheckIcon size={12} /> : <Text style={styles.needText}>need</Text>}
+                <View key={`${name}-${i}`} style={[styles.ing, cutCorners.c]}>
+                  <IngredientArt name={name} size={26} shadow={false} />
+                  <Text style={styles.ingName} numberOfLines={2}>
+                    {scaleIngredient(name, factor)}
+                  </Text>
+                  {have ? (
+                    <View style={styles.haveDot} accessibilityLabel="In your pantry">
+                      <CheckIcon size={10} />
                     </View>
-                  </PaperCard>
-                </Animated.View>
+                  ) : (
+                    <Text style={styles.needText}>need</Text>
+                  )}
+                </View>
               );
             })}
           </View>
@@ -222,54 +239,72 @@ export default function RecipeOverviewScreen() {
 
         <View>
           <Text style={[styles.section, styles.sectionGap]}>Steps</Text>
-          <View style={styles.steps}>
+          <PaperCard shape="a" lift={3} contentStyle={styles.steps}>
             {recipe.steps.map((step, i) => {
               const scene = SCENE_LABEL[getPaperSceneKind(step)];
+              const timer = stepTimer(step.text);
               return (
-                <Animated.View key={`${i}-${step.text}`} entering={dealIn(i + 2)}>
-                  <PaperCard shape={i % 2 ? 'b' : 'a'} lift={3} contentStyle={styles.step}>
-                    <View style={[styles.stepNum, cutCorners.c]}>
-                      <Text style={styles.stepNumText}>{i + 1}</Text>
-                    </View>
-                    <View style={styles.flex}>
-                      <Text style={styles.stepText}>{step.text}</Text>
-                      <Text style={[styles.stepTag, { color: scene.color === paper.ink ? paper.inkSoft : scene.color }]}>
-                        {scene.label}
-                      </Text>
-                    </View>
-                  </PaperCard>
-                </Animated.View>
+                <View key={`${i}-${step.text}`} style={[styles.step, i < recipe.steps.length - 1 && styles.stepDivider]}>
+                  <View style={[styles.stepNum, cutCorners.c]}>
+                    <Text style={styles.stepNumText}>{i + 1}</Text>
+                  </View>
+                  <View style={styles.flex}>
+                    <Text style={styles.stepText}>{step.text}</Text>
+                    <Text style={[styles.stepTag, { color: scene.color === paper.ink ? paper.inkSoft : scene.color }]}>
+                      {scene.label}
+                      {timer ? ` · ${timer.minutes} min timer` : ''}
+                    </Text>
+                  </View>
+                </View>
               );
             })}
-          </View>
+          </PaperCard>
         </View>
 
-        <View style={styles.cardSection}>
-          <Text style={styles.section}>Recipe card</Text>
-          <Text style={styles.cardHint}>
-            {unlocked
-              ? 'Yours to keep. Cook it more to level up its rarity.'
-              : `Cook it ${CARD_UNLOCK_COOKS} times to unlock a shareable card with its stats.`}
-          </Text>
-          <Animated.View entering={FadeIn.delay(200)} style={styles.cardWrap}>
-            {unlocked ? (
-              <CollectibleCard
-                ref={cardRef}
-                title={recipe.title}
-                nutrition={nutrition}
-                cooks={cooks}
-                servings={baseServings}
-                minutes={minutes}
-                steps={recipe.steps.length}
-                number={cardNumber}
-                width={300}
-              />
-            ) : (
-              <LockedCard title={recipe.title} cooks={cooks} width={300} />
-            )}
-          </Animated.View>
-          {unlocked ? (
-            <PaperButton label="Share card" color={paper.green} icon={<ShareIcon size={20} color={paper.card} />} onPress={share} style={styles.shareBtn} />
+        <View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ expanded: cardOpen }}
+            onPress={() => setCardOpen((o) => !o)}
+          >
+            <PaperCard shape="b" lift={3} contentStyle={styles.cardRow}>
+              <View style={[styles.cardThumb, cutCorners.b, unlocked && { backgroundColor: color }]}>
+                {unlocked ? <DishArt title={recipe.title} size={30} /> : <Text style={styles.cardThumbQ}>?</Text>}
+              </View>
+              <View style={styles.flex}>
+                <Text style={styles.cardRowTitle}>Recipe card</Text>
+                <Text style={styles.cardRowHint}>
+                  {unlocked
+                    ? `${rarityLabel} · cooked ${cooks} times`
+                    : `Cooked ${cooks} of ${CARD_UNLOCK_COOKS} · ${CARD_UNLOCK_COOKS - cooks} more to unlock`}
+                </Text>
+              </View>
+              {unlocked ? (
+                <Pressable accessibilityRole="button" accessibilityLabel="Share recipe card" hitSlop={8} onPress={share} style={[styles.cardShare, cutCorners.c]}>
+                  <ShareIcon size={18} color={paper.card} />
+                </Pressable>
+              ) : null}
+              <Text style={styles.cardToggle}>{cardOpen ? 'Hide' : 'Show'}</Text>
+            </PaperCard>
+          </Pressable>
+          {cardOpen ? (
+            <Animated.View entering={FadeIn.duration(200)} style={styles.cardWrap}>
+              {unlocked ? (
+                <CollectibleCard
+                  ref={cardRef}
+                  title={recipe.title}
+                  nutrition={nutrition}
+                  cooks={cooks}
+                  servings={baseServings}
+                  minutes={minutes}
+                  steps={recipe.steps.length}
+                  number={cardNumber}
+                  width={300}
+                />
+              ) : (
+                <LockedCard title={recipe.title} cooks={cooks} width={300} />
+              )}
+            </Animated.View>
           ) : null}
         </View>
       </ScrollView>
@@ -277,7 +312,6 @@ export default function RecipeOverviewScreen() {
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 14) }]}>
         <PaperButton
           label={`Start cooking for ${serves}`}
-          size="lg"
           onPress={() => router.push({ pathname: '/cook/[id]', params: { id: recipe.id, serves: String(serves) } })}
         />
       </View>
@@ -309,22 +343,70 @@ export default function RecipeOverviewScreen() {
 }
 
 const styles = StyleSheet.create({
-  cardHint: {
+  cardRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  cardRowHint: {
     color: paper.inkSoft,
     fontFamily: fonts.body,
-    fontSize: 14,
-    marginBottom: 14,
-    marginTop: 2,
+    fontSize: 12,
   },
-  cardSection: {
-    alignItems: 'stretch',
+  cardRowTitle: {
+    color: paper.ink,
+    fontFamily: fonts.bodyBold,
+    fontSize: 14,
+  },
+  cardShare: {
+    alignItems: 'center',
+    backgroundColor: paper.green,
+    height: 34,
+    justifyContent: 'center',
+    width: 34,
+  },
+  cardThumb: {
+    alignItems: 'center',
+    backgroundColor: paper.ink,
+    height: 46,
+    justifyContent: 'center',
+    width: 34,
+  },
+  cardThumbQ: {
+    color: paper.yellow,
+    fontFamily: fonts.display,
+    fontSize: 20,
+  },
+  cardToggle: {
+    color: paper.redDeep,
+    fontFamily: fonts.bodyBold,
+    fontSize: 12.5,
   },
   cardWrap: {
     alignItems: 'center',
+    marginTop: 16,
   },
-  shareBtn: {
-    alignSelf: 'center',
-    marginTop: 20,
+  haveDot: {
+    alignItems: 'center',
+    backgroundColor: paper.green,
+    borderRadius: 8,
+    height: 16,
+    justifyContent: 'center',
+    width: 16,
+  },
+  heroMeta: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 12.5,
+    marginTop: 4,
+  },
+  statSoft: {
+    backgroundColor: 'rgba(255,248,236,0.6)',
+  },
+  stepDivider: {
+    borderBottomColor: paper.kraft,
+    borderBottomWidth: 1,
   },
   original: {
     alignItems: 'center',
@@ -334,30 +416,31 @@ const styles = StyleSheet.create({
   originalText: {
     color: paper.inkSoft,
     fontFamily: fonts.bodyBold,
-    fontSize: 14,
+    fontSize: 13,
     textDecorationLine: 'underline',
   },
   servesCard: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    gap: 8,
+    paddingLeft: 14,
+    paddingRight: 8,
+    paddingVertical: 8,
   },
   servesHint: {
     color: paper.inkSoft,
     fontFamily: fonts.body,
-    fontSize: 12.5,
+    fontSize: 11.5,
   },
   servesLabel: {
     color: paper.ink,
-    fontFamily: fonts.display,
-    fontSize: 19,
+    fontFamily: fonts.bodyBold,
+    fontSize: 14,
   },
   servesReset: {
     color: paper.redDeep,
     fontFamily: fonts.bodyBold,
-    fontSize: 12.5,
+    fontSize: 11.5,
     textDecorationLine: 'underline',
   },
   backdrop: {
@@ -399,8 +482,8 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
   },
   content: {
-    gap: 22,
-    paddingHorizontal: 20,
+    gap: 14,
+    paddingHorizontal: 16,
   },
   flex: {
     flex: 1,
@@ -408,59 +491,50 @@ const styles = StyleSheet.create({
   footer: {
     bottom: 0,
     left: 0,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingTop: 10,
     position: 'absolute',
     right: 0,
   },
   haveText: {
     fontFamily: fonts.bodyBold,
-    fontSize: 13.5,
+    fontSize: 12.5,
   },
   hero: {
     alignItems: 'center',
-    padding: 20,
-  },
-  heroArt: {
-    marginBottom: 4,
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
   iconBtn: {
     alignItems: 'center',
-    height: 46,
+    height: 40,
     justifyContent: 'center',
-    width: 46,
+    width: 40,
   },
   ing: {
     alignItems: 'center',
-    gap: 2,
-    minHeight: 104,
-    paddingHorizontal: 4,
-    paddingVertical: 10,
-  },
-  ingBadge: {
-    alignItems: 'center',
-    borderRadius: 9,
-    height: 18,
-    justifyContent: 'center',
-    minWidth: 18,
-    paddingHorizontal: 4,
-    position: 'absolute',
-    right: 6,
-    top: 6,
-  },
-  ingCell: {
-    width: '30.5%',
+    backgroundColor: paper.card,
+    flexDirection: 'row',
+    gap: 8,
+    minHeight: 40,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    width: '48.8%',
   },
   ingGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 6,
+    justifyContent: 'space-between',
   },
   ingName: {
     color: paper.ink,
+    flex: 1,
     fontFamily: fonts.bodyBold,
-    fontSize: 12.5,
-    textAlign: 'center',
+    fontSize: 13,
+    lineHeight: 16,
   },
   missing: {
     color: paper.ink,
@@ -468,79 +542,85 @@ const styles = StyleSheet.create({
     fontSize: 22,
   },
   needText: {
+    backgroundColor: paper.kraft,
+    borderRadius: 6,
     color: paper.ink,
     fontFamily: fonts.bodyBold,
     fontSize: 10,
+    overflow: 'hidden',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
   },
   section: {
     color: paper.ink,
     fontFamily: fonts.display,
-    fontSize: 22,
+    fontSize: 18,
   },
   sectionGap: {
-    marginBottom: 10,
+    marginBottom: 8,
   },
   sectionHead: {
     alignItems: 'baseline',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   stat: {
     backgroundColor: paper.card,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
   },
   statRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    justifyContent: 'center',
-    marginTop: 10,
+    gap: 6,
+    marginTop: 6,
   },
   statText: {
     color: paper.ink,
     fontFamily: fonts.bodyBold,
-    fontSize: 12.5,
+    fontSize: 11.5,
   },
   step: {
     alignItems: 'flex-start',
     flexDirection: 'row',
-    gap: 12,
-    padding: 12,
+    gap: 10,
+    paddingVertical: 10,
   },
   stepNum: {
     alignItems: 'center',
     backgroundColor: paper.ink,
-    height: 32,
+    height: 22,
     justifyContent: 'center',
-    width: 32,
+    marginTop: 1,
+    width: 22,
   },
   stepNumText: {
     color: paper.card,
-    fontFamily: fonts.display,
-    fontSize: 16,
+    fontFamily: fonts.bodyBold,
+    fontSize: 12,
   },
   stepTag: {
     fontFamily: fonts.bodyBold,
-    fontSize: 12,
-    marginTop: 3,
+    fontSize: 10.5,
+    letterSpacing: 0.4,
+    marginTop: 2,
     textTransform: 'uppercase',
   },
   stepText: {
     color: paper.ink,
     fontFamily: fonts.body,
-    fontSize: 15.5,
-    lineHeight: 21,
+    fontSize: 14.5,
+    lineHeight: 20,
   },
   steps: {
-    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 2,
   },
   title: {
     fontFamily: fonts.display,
-    fontSize: 30,
-    lineHeight: 36,
-    textAlign: 'center',
+    fontSize: 22,
+    lineHeight: 25,
   },
   topBar: {
     alignItems: 'center',
@@ -549,6 +629,6 @@ const styles = StyleSheet.create({
   },
   topRight: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
   },
 });

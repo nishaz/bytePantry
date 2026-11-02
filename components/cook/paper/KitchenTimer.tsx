@@ -89,9 +89,9 @@ export function KitchenTimer({ timer, note, onToggle, onAdjust, onReset, onStopR
 
   if (timer.ringing) {
     return (
-      <PaperCard color={paper.green} shape="c" tilt={-1} lift={4} contentStyle={styles.card}>
+      <PaperCard color={paper.green} shape="c" lift={3} contentStyle={styles.card}>
         <Animated.View style={shakeStyle}>
-          <Dial ratio={0} size={58} />
+          <Dial ratio={0} size={40} />
         </Animated.View>
         <View style={styles.flex}>
           <Text style={[styles.clock, { color: paper.card }]}>Time's up!</Text>
@@ -103,9 +103,9 @@ export function KitchenTimer({ timer, note, onToggle, onAdjust, onReset, onStopR
   }
 
   return (
-    <PaperCard shape="c" tilt={-1} lift={4} contentStyle={styles.card}>
+    <PaperCard shape="c" lift={3} contentStyle={styles.card}>
       <Animated.View style={shakeStyle}>
-        <Dial ratio={ratio} size={58} />
+        <Dial ratio={ratio} size={40} />
       </Animated.View>
       <View style={styles.flex}>
         <Text style={styles.clock} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
@@ -178,14 +178,14 @@ const styles = StyleSheet.create({
   adjBtn: {
     alignItems: 'center',
     backgroundColor: paper.kraft,
-    height: 40,
+    height: 34,
     justifyContent: 'center',
-    width: 40,
+    width: 34,
   },
   adjText: {
     color: paper.ink,
     fontFamily: fonts.bodyBold,
-    fontSize: 15,
+    fontSize: 13,
   },
   adjust: {
     flexDirection: 'row',
@@ -194,15 +194,15 @@ const styles = StyleSheet.create({
   card: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
   clock: {
     color: paper.ink,
     fontFamily: fonts.display,
-    fontSize: 26,
-    lineHeight: 30,
+    fontSize: 20,
+    lineHeight: 23,
   },
   controls: {
     alignItems: 'center',
@@ -232,6 +232,6 @@ const styles = StyleSheet.create({
   sub: {
     color: paper.inkSoft,
     fontFamily: fonts.bodyBold,
-    fontSize: 12,
+    fontSize: 11,
   },
 });

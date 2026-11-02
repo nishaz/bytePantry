@@ -129,7 +129,7 @@ export default function CookScreen() {
   });
   const stepTimer = timerMinutes !== null ? (timers[stepIndex] ?? fresh(timerMinutes)) : null;
   // Fit the scene inside whatever space is left, leaving room for the mini-game meter under it.
-  const sceneSize = sceneBox ? Math.max(120, Math.min(sceneBox.w - 24, sceneBox.h - 70, 400)) : Math.min(width - 24, height * 0.3);
+  const sceneSize = sceneBox ? Math.max(120, Math.min(sceneBox.w - 24, sceneBox.h - 56, 400)) : Math.min(width - 24, height * 0.3);
   const otherTimers = Object.values(timers).filter((t) => t.step !== stepIndex && (t.running || t.ringing));
 
   function updateTimer(change: (t: TimerState) => TimerState) {
@@ -195,6 +195,18 @@ export default function CookScreen() {
             <BackIcon />
           </PaperCard>
         </Pressable>
+        <View style={styles.progress} accessibilityLabel={`Step ${stepIndex + 1} of ${steps.length}`}>
+          {steps.map((_, i) => (
+            <View
+              key={i}
+              style={[
+                styles.seg,
+                i % 2 ? cutCorners.b : cutCorners.c,
+                { backgroundColor: i < stepIndex ? paper.green : i === stepIndex ? paper.yellow : paper.card },
+              ]}
+            />
+          ))}
+        </View>
         <View style={styles.topRight}>
           {otherTimers.map((t) => (
             <TimerPill
@@ -209,7 +221,7 @@ export default function CookScreen() {
               }}
             />
           ))}
-          <PaperCard color={paper.green} shape="c" tilt={2} lift={3} contentStyle={styles.xpChip}>
+          <PaperCard color={paper.green} shape="c" lift={2} contentStyle={styles.xpChip}>
             <Text style={styles.xpChipText}>+{stepXp} XP</Text>
           </PaperCard>
         </View>
@@ -244,19 +256,7 @@ export default function CookScreen() {
             />
           </Animated.View>
         ) : null}
-        <PaperCard shape="d" lift={6} contentStyle={styles.card}>
-          <View style={styles.progress}>
-            {steps.map((_, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.seg,
-                  i % 2 ? cutCorners.b : cutCorners.c,
-                  { backgroundColor: i < stepIndex ? paper.green : i === stepIndex ? paper.yellow : paper.kraft },
-                ]}
-              />
-            ))}
-          </View>
+        <PaperCard shape="d" lift={4} contentStyle={styles.card}>
           <Text style={styles.meta} numberOfLines={1}>
             {recipe.title} · Step {stepIndex + 1} of {steps.length}
             {people !== baseServings ? ` · for ${people}` : ''}
@@ -280,7 +280,6 @@ export default function CookScreen() {
             />
             <PaperButton
               label={isLast ? 'Finish dish!' : 'Done!'}
-              size="lg"
               color={isLast ? paper.green : paper.red}
               disabled={busy}
               onPress={handleDone}
@@ -315,16 +314,15 @@ export default function CookScreen() {
 
 const styles = StyleSheet.create({
   card: {
-    paddingBottom: 16,
-    paddingHorizontal: 18,
-    paddingTop: 16,
+    paddingBottom: 12,
+    paddingHorizontal: 14,
+    paddingTop: 12,
   },
   cardWrap: {
     paddingHorizontal: 12,
   },
   timerWrap: {
-    marginBottom: 12,
-    paddingHorizontal: 6,
+    marginBottom: 10,
   },
   centered: {
     alignItems: 'center',
@@ -336,9 +334,9 @@ const styles = StyleSheet.create({
   },
   iconBtn: {
     alignItems: 'center',
-    height: 46,
+    height: 40,
     justifyContent: 'center',
-    width: 46,
+    width: 40,
   },
   ingChip: {
     alignItems: 'center',
@@ -364,7 +362,7 @@ const styles = StyleSheet.create({
   meta: {
     color: paper.inkSoft,
     fontFamily: fonts.bodyBold,
-    fontSize: 13,
+    fontSize: 12,
   },
   missing: {
     color: paper.ink,
@@ -373,12 +371,12 @@ const styles = StyleSheet.create({
   },
   nav: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
   },
   progress: {
+    flex: 1,
     flexDirection: 'row',
-    gap: 6,
-    marginBottom: 12,
+    gap: 4,
   },
   sceneArea: {
     alignItems: 'center',
@@ -389,24 +387,24 @@ const styles = StyleSheet.create({
   },
   seg: {
     flex: 1,
-    height: 9,
+    height: 7,
   },
   // Rounded body font rather than the chunky display face, so long steps stay readable.
   stepText: {
     color: paper.ink,
     fontFamily: fonts.bodyBold,
-    fontSize: 21,
-    lineHeight: 28,
-    marginBottom: 14,
+    fontSize: 18.5,
+    lineHeight: 25,
+    marginBottom: 12,
     marginTop: 4,
   },
   stepTextLong: {
-    fontSize: 16.5,
-    lineHeight: 23,
+    fontSize: 15.5,
+    lineHeight: 21,
   },
   stepTextMid: {
-    fontSize: 18.5,
-    lineHeight: 25,
+    fontSize: 17,
+    lineHeight: 23,
   },
   timer: {
     alignItems: 'center',
@@ -428,21 +426,21 @@ const styles = StyleSheet.create({
   topBar: {
     alignItems: 'center',
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    gap: 10,
+    paddingHorizontal: 14,
   },
   topRight: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
   },
   xpChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
   },
   xpChipText: {
     color: paper.card,
-    fontFamily: fonts.display,
-    fontSize: 16,
+    fontFamily: fonts.bodyBold,
+    fontSize: 12.5,
   },
 });

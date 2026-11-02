@@ -177,7 +177,7 @@ export function InteractiveScene({ kind, ingredients, size, onComplete }: Intera
       {surface}
       {game ? (
         <Animated.View entering={FadeIn.delay(300)} style={styles.meterWrap}>
-          <PaperCard shape="c" tilt={-1} lift={3} color={done ? paper.green : paper.card} contentStyle={styles.meter}>
+          <PaperCard shape="c" lift={2} color={done ? paper.green : paper.card} contentStyle={styles.meter}>
             {done ? (
               <Animated.Text entering={FadeIn.duration(200)} style={[styles.prompt, styles.donePrompt]}>
                 {game.done} +{GAME_BONUS_XP} bonus XP
@@ -208,24 +208,24 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   meter: {
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
   meterWrap: {
     alignSelf: 'center',
-    marginTop: 4,
-    minWidth: 240,
+    marginTop: 2,
+    minWidth: 200,
   },
   prompt: {
     color: paper.ink,
     fontFamily: fonts.bodyBold,
-    fontSize: 14,
+    fontSize: 12.5,
   },
   track: {
     backgroundColor: paper.kraft,
-    borderRadius: 5,
-    height: 9,
+    borderRadius: 4,
+    height: 6,
     overflow: 'hidden',
   },
   wrap: {
