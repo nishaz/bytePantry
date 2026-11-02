@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
+import { estimateNutrition, NUTRIENT_FIELDS, nutritionCoverage, type NutrientKey, type Nutrition } from '../../lib/nutrition';
 import { DEFAULT_SERVINGS } from '../../lib/scaleIngredients';
+import { suggestSteps } from '../../lib/suggestSteps';
 import { inferAction } from '../../lib/stepSceneLayout';
 import { cutCorners, fonts, paper } from '../../lib/theme';
 import type { Step } from '../../types/recipe';
@@ -15,6 +17,8 @@ export interface RecipeDraft {
   ingredients: string[];
   steps: Step[];
   servings: number;
+  /** Per-serving stats for the recipe card. */
+  nutrition: Nutrition;
 }
 
 function parseIngredients(raw: string): string[] {
@@ -35,7 +39,7 @@ function parseSteps(raw: string, previous: Step[]): Step[] {
 }
 
 interface RecipeFormProps {
-  initial?: Partial<RecipeDraft>;
+  initial?: Partial<Omit<RecipeDraft, 'nutrition'>> & { nutrition?: Nutrition | null; stepsGuessed?: boolean };
   submitLabel: string;
   onSubmit: (draft: RecipeDraft) => Promise<void>;
 }
@@ -47,8 +51,33 @@ export function RecipeForm({ initial, submitLabel, onSubmit }: RecipeFormProps) 
   const [stepsText, setStepsText] = useState(initial?.steps?.map((s) => s.text).join('\n') ?? '');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [stepsGuessed, setStepsGuessed] = useState(false);
+  // Only the numbers the cook typed. Everything else follows the live estimate.
+  const [nutritionEdits, setNutritionEdits] = useState<Partial<Record<NutrientKey, string>>>(() => {
+    const n = initial?.nutrition;
+    if (!n || n.estimated) return {};
+    return Object.fromEntries(NUTRIENT_FIELDS.map((f) => [f.key, String(n[f.key])]));
+  });
 
   const ingredients = parseIngredients(ingredientsText);
+  const estimate = estimateNutrition(ingredients, servings);
+  const coverage = nutritionCoverage(ingredients);
+  const edited = Object.keys(nutritionEdits).length > 0;
+
+  function currentNutrition(): Nutrition {
+    const n: Nutrition = { ...estimate, estimated: !edited };
+    for (const f of NUTRIENT_FIELDS) {
+      const raw = nutritionEdits[f.key];
+      if (raw !== undefined && raw.trim() !== '' && !Number.isNaN(Number(raw))) n[f.key] = Math.max(0, Math.round(Number(raw)));
+    }
+    return n;
+  }
+
+  function guessSteps() {
+    const drafted = suggestSteps(title || 'My recipe', ingredients);
+    setStepsText(drafted.join('\n'));
+    setStepsGuessed(true);
+  }
 
   async function submit() {
     const trimmed = title.trim();
@@ -64,7 +93,7 @@ export function RecipeForm({ initial, submitLabel, onSubmit }: RecipeFormProps) 
     setError('');
     setSaving(true);
     try {
-      await onSubmit({ title: trimmed, ingredients, steps, servings });
+      await onSubmit({ title: trimmed, ingredients, steps, servings, nutrition: currentNutrition() });
     } catch (e) {
       console.error(e);
       setError('Could not save the recipe. Please try again.');
@@ -111,10 +140,23 @@ export function RecipeForm({ initial, submitLabel, onSubmit }: RecipeFormProps) 
         </View>
       ) : null}
 
-      <Text style={styles.label}>Steps (one per line)</Text>
+      <View style={styles.labelRow}>
+        <Text style={[styles.label, styles.flex]}>Steps (one per line)</Text>
+        {ingredients.length > 0 ? (
+          <Pressable accessibilityRole="button" onPress={guessSteps} hitSlop={8} style={[styles.guessBtn, cutCorners.b]}>
+            <Text style={styles.guessText}>{stepsText.trim() ? 'Redo steps for me' : 'Write steps for me'}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+      {stepsGuessed || initial?.stepsGuessed ? (
+        <Text style={styles.guessNote}>Drafted from the ingredients. Give them a read and tweak anything that's off.</Text>
+      ) : null}
       <TextInput
         value={stepsText}
-        onChangeText={setStepsText}
+        onChangeText={(t) => {
+          setStepsText(t);
+          setStepsGuessed(false);
+        }}
         placeholder={'Mix the batter\nFry in a pan for 3 minutes\nServe warm'}
         placeholderTextColor={paper.inkSoft}
         multiline
@@ -122,6 +164,44 @@ export function RecipeForm({ initial, submitLabel, onSubmit }: RecipeFormProps) 
         accessibilityLabel="Steps, one per line"
       />
       <Text style={styles.tip}>Tip: mention a time like "simmer for 10 minutes" and you'll get a timer.</Text>
+
+      <View style={styles.labelRow}>
+        <Text style={[styles.label, styles.flex]}>Nutrition per serving</Text>
+        {edited ? (
+          <Pressable accessibilityRole="button" onPress={() => setNutritionEdits({})} hitSlop={8}>
+            <Text style={styles.reset}>Use estimate</Text>
+          </Pressable>
+        ) : null}
+      </View>
+      <Text style={styles.tipTop}>
+        {ingredients.length === 0
+          ? 'Add ingredients and we will estimate these for the recipe card.'
+          : edited
+            ? 'Using your numbers.'
+            : `Estimated from ${coverage.known} of ${coverage.total} ingredients. Tap a number to change it.`}
+      </Text>
+      <View style={styles.nutriRow}>
+        {NUTRIENT_FIELDS.map((f) => {
+          const mine = nutritionEdits[f.key];
+          return (
+            <View key={f.key} style={styles.nutriCell}>
+              <TextInput
+                value={mine ?? String(estimate[f.key])}
+                onChangeText={(t) => setNutritionEdits((all) => ({ ...all, [f.key]: t.replace(/[^0-9.]/g, '') }))}
+                keyboardType="numeric"
+                selectTextOnFocus
+                style={[styles.input, styles.nutriInput, cutCorners.c, mine !== undefined && styles.nutriMine]}
+                accessibilityLabel={`${f.label} per serving, ${f.unit}`}
+              />
+              <Text style={styles.nutriLabel}>
+                {f.label}
+                {'\n'}
+                <Text style={styles.nutriUnit}>{f.unit}</Text>
+              </Text>
+            </View>
+          );
+        })}
+      </View>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <PaperButton label={saving ? 'Saving…' : submitLabel} size="lg" disabled={saving} onPress={submit} style={styles.save} />
@@ -201,8 +281,77 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 10,
   },
+  flex: {
+    flex: 1,
+  },
   form: {
     padding: 18,
+  },
+  guessBtn: {
+    backgroundColor: paper.yellow,
+    marginTop: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  guessNote: {
+    color: paper.amberText,
+    fontFamily: fonts.bodyBold,
+    fontSize: 12.5,
+    marginBottom: 6,
+  },
+  guessText: {
+    color: paper.ink,
+    fontFamily: fonts.bodyBold,
+    fontSize: 12.5,
+  },
+  labelRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  nutriCell: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  nutriInput: {
+    alignSelf: 'stretch',
+    fontFamily: fonts.bodyBold,
+    paddingHorizontal: 4,
+    textAlign: 'center',
+  },
+  nutriLabel: {
+    color: paper.ink,
+    fontFamily: fonts.bodyBold,
+    fontSize: 11.5,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  nutriMine: {
+    backgroundColor: paper.cream,
+    borderColor: paper.yellow,
+    borderWidth: 2,
+  },
+  nutriRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  nutriUnit: {
+    color: paper.inkSoft,
+    fontFamily: fonts.body,
+    fontSize: 10.5,
+  },
+  reset: {
+    color: paper.redDeep,
+    fontFamily: fonts.bodyBold,
+    fontSize: 12.5,
+    marginTop: 12,
+    textDecorationLine: 'underline',
+  },
+  tipTop: {
+    color: paper.inkSoft,
+    fontFamily: fonts.body,
+    fontSize: 12.5,
+    marginBottom: 8,
   },
   input: {
     backgroundColor: paper.kraft,

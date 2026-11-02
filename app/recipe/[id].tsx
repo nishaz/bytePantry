@@ -1,5 +1,5 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,13 +10,16 @@ import { Bob, dealIn } from '../../components/paper/Motion';
 import { PaperBackground } from '../../components/paper/PaperBackground';
 import { PaperButton } from '../../components/paper/PaperButton';
 import { PaperCard } from '../../components/paper/PaperCard';
-import { BackIcon, CheckIcon, LinkIcon, PencilIcon, TrashIcon } from '../../components/paper/UiIcons';
+import { BackIcon, CheckIcon, LinkIcon, PencilIcon, ShareIcon, TrashIcon } from '../../components/paper/UiIcons';
+import { CollectibleCard, LockedCard } from '../../components/recipe/CollectibleCard';
 import { ServingsStepper } from '../../components/recipe/RecipeForm';
-import { deleteRecipe, getRecipe } from '../../lib/db';
+import { CARD_UNLOCK_COOKS, deleteRecipe, getRecipe, listRecipes } from '../../lib/db';
 import { listFridgeItems } from '../../lib/fridgeDb';
+import { estimateNutrition } from '../../lib/nutrition';
 import { matchRecipe } from '../../lib/pantryMatch';
 import { XP_PER_STEP, XP_RECIPE_BONUS } from '../../lib/profile';
 import { DEFAULT_SERVINGS, scaleIngredient } from '../../lib/scaleIngredients';
+import { shareCard } from '../../lib/shareCard';
 import { getPaperSceneKind } from '../../lib/stepSceneLayout';
 import { cutCorners, estimateRecipeMinutes, fonts, formatSource, paper } from '../../lib/theme';
 import type { FridgeItem } from '../../types/fridge';
@@ -32,7 +35,7 @@ const SCENE_LABEL: Record<string, { label: string; color: string }> = {
 };
 
 export default function RecipeOverviewScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, card } = useLocalSearchParams<{ id: string; card?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
@@ -40,15 +43,22 @@ export default function RecipeOverviewScreen() {
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [people, setPeople] = useState<number | null>(null);
+  const [cardNumber, setCardNumber] = useState(1);
+  const scrollRef = useRef<ScrollView>(null);
+  const cardRef = useRef<View>(null);
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
       (async () => {
-        const [r, f] = await Promise.all([id ? getRecipe(id) : Promise.resolve(null), listFridgeItems()]);
+        const [r, f, all] = await Promise.all([id ? getRecipe(id) : Promise.resolve(null), listFridgeItems(), listRecipes()]);
         if (active) {
           setRecipe(r);
           setFridge(f);
+          // Card numbers follow the order recipes were added: your first recipe is #001.
+          const oldestFirst = [...all].sort((a, b) => a.createdAt - b.createdAt);
+          setCardNumber(Math.max(1, oldestFirst.findIndex((x) => x.id === id) + 1));
+          if (card === '1') setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 500);
           setPeople((current) => current ?? r?.servings ?? DEFAULT_SERVINGS);
           setLoading(false);
         }
@@ -56,7 +66,7 @@ export default function RecipeOverviewScreen() {
       return () => {
         active = false;
       };
-    }, [id]),
+    }, [id, card]),
   );
 
   if (loading) {
@@ -85,6 +95,11 @@ export default function RecipeOverviewScreen() {
   const baseServings = recipe.servings ?? DEFAULT_SERVINGS;
   const serves = people ?? baseServings;
   const factor = serves / baseServings;
+  const cooks = recipe.timesCooked ?? 0;
+  const unlocked = cooks >= CARD_UNLOCK_COOKS;
+  const nutrition = recipe.nutrition ?? estimateNutrition(recipe.ingredients, baseServings);
+  const minutes = estimateRecipeMinutes(recipe.steps.length);
+  const share = () => shareCard(cardRef, recipe.title, nutrition, cooks);
 
   async function remove() {
     if (!recipe) return;
@@ -95,6 +110,7 @@ export default function RecipeOverviewScreen() {
   return (
     <PaperBackground>
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 120 }]}
         showsVerticalScrollIndicator={false}
       >
@@ -105,6 +121,13 @@ export default function RecipeOverviewScreen() {
             </PaperCard>
           </Pressable>
           <View style={styles.topRight}>
+            {unlocked ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Share recipe card" onPress={share}>
+                <PaperCard shape="b" lift={3} color={paper.green} contentStyle={styles.iconBtn}>
+                  <ShareIcon size={21} color={paper.card} />
+                </PaperCard>
+              </Pressable>
+            ) : null}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Edit recipe"
@@ -130,7 +153,7 @@ export default function RecipeOverviewScreen() {
             <Text style={[styles.title, { color: fg }]}>{recipe.title}</Text>
             <View style={styles.statRow}>
               {[
-                `${estimateRecipeMinutes(recipe.steps.length)} min`,
+                `${minutes} min`,
                 `${recipe.steps.length} steps`,
                 `+${totalXp} XP`,
                 formatSource(recipe.source),
@@ -220,6 +243,35 @@ export default function RecipeOverviewScreen() {
             })}
           </View>
         </View>
+
+        <View style={styles.cardSection}>
+          <Text style={styles.section}>Recipe card</Text>
+          <Text style={styles.cardHint}>
+            {unlocked
+              ? 'Yours to keep. Cook it more to level up its rarity.'
+              : `Cook it ${CARD_UNLOCK_COOKS} times to unlock a shareable card with its stats.`}
+          </Text>
+          <Animated.View entering={FadeIn.delay(200)} style={styles.cardWrap}>
+            {unlocked ? (
+              <CollectibleCard
+                ref={cardRef}
+                title={recipe.title}
+                nutrition={nutrition}
+                cooks={cooks}
+                servings={baseServings}
+                minutes={minutes}
+                steps={recipe.steps.length}
+                number={cardNumber}
+                width={300}
+              />
+            ) : (
+              <LockedCard title={recipe.title} cooks={cooks} width={300} />
+            )}
+          </Animated.View>
+          {unlocked ? (
+            <PaperButton label="Share card" color={paper.green} icon={<ShareIcon size={20} color={paper.card} />} onPress={share} style={styles.shareBtn} />
+          ) : null}
+        </View>
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 14) }]}>
@@ -257,6 +309,23 @@ export default function RecipeOverviewScreen() {
 }
 
 const styles = StyleSheet.create({
+  cardHint: {
+    color: paper.inkSoft,
+    fontFamily: fonts.body,
+    fontSize: 14,
+    marginBottom: 14,
+    marginTop: 2,
+  },
+  cardSection: {
+    alignItems: 'stretch',
+  },
+  cardWrap: {
+    alignItems: 'center',
+  },
+  shareBtn: {
+    alignSelf: 'center',
+    marginTop: 20,
+  },
   original: {
     alignItems: 'center',
     flexDirection: 'row',

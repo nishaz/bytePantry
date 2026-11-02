@@ -14,6 +14,7 @@ import { createRecipeId, saveRecipe } from '../../lib/db';
 import { ImportError, importRecipeFromLink } from '../../lib/importRecipe';
 import { parseFreeTextRecipe } from '../../lib/recipeParse';
 import { parseServings } from '../../lib/scaleIngredients';
+import { suggestSteps } from '../../lib/suggestSteps';
 import { inferAction } from '../../lib/stepSceneLayout';
 import { cutCorners, fonts, paper } from '../../lib/theme';
 
@@ -27,19 +28,24 @@ export default function AddScreen() {
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState('');
   const [importNote, setImportNote] = useState('');
-  const [prefill, setPrefill] = useState<Partial<RecipeDraft> | undefined>(undefined);
+  const [prefill, setPrefill] = useState<(Partial<Omit<RecipeDraft, 'nutrition'>> & { stepsGuessed?: boolean }) | undefined>(undefined);
   const [imported, setImported] = useState<{ source: string; sourceUrl: string } | null>(null);
   const [pasteText, setPasteText] = useState('');
 
-  function fillForm(draft: { title: string; ingredients: string[]; steps: string[]; servings: number | null }) {
+  /** Returns true when the steps had to be drafted because the post only listed ingredients. */
+  function fillForm(draft: { title: string; ingredients: string[]; steps: string[]; servings: number | null }): boolean {
+    const guessed = draft.steps.length === 0 && draft.ingredients.length > 0;
+    const steps = guessed ? suggestSteps(draft.title, draft.ingredients) : draft.steps;
     setPrefill({
       title: draft.title,
       ingredients: draft.ingredients,
-      steps: draft.steps.map((text) => ({ text, action: inferAction(text), ingredient: '', tool: '' })),
+      steps: steps.map((text) => ({ text, action: inferAction(text), ingredient: '', tool: '' })),
       servings: draft.servings ?? undefined,
+      stepsGuessed: guessed,
     });
     setFormKey((k) => k + 1);
     setShowForm(true);
+    return guessed;
   }
 
   async function runImport() {
@@ -49,11 +55,13 @@ export default function AddScreen() {
     try {
       const result = await importRecipeFromLink(link);
       setImported({ source: result.source, sourceUrl: result.sourceUrl });
-      fillForm(result);
+      const guessed = fillForm(result);
       setImportNote(
-        result.complete
-          ? 'Imported! Give it a quick check, then save.'
-          : 'Got part of it. Fill in what is missing, then save.',
+        guessed
+          ? 'The post only had ingredients, so I drafted the steps. Check them over, then save.'
+          : result.complete
+            ? 'Imported! Give it a quick check, then save.'
+            : 'Got part of it. Fill in what is missing, then save.',
       );
     } catch (e) {
       setImportError(e instanceof ImportError ? e.message : 'Something went wrong reading that link.');
@@ -64,9 +72,11 @@ export default function AddScreen() {
 
   function fillFromText() {
     const parsed = parseFreeTextRecipe(pasteText, 'My recipe');
-    fillForm({ ...parsed, servings: parseServings(pasteText) });
+    const guessed = fillForm({ ...parsed, servings: parseServings(pasteText) });
     setImportError('');
-    setImportNote('Filled in from your text. Check it over, then save.');
+    setImportNote(
+      guessed ? 'No steps in that text, so I drafted some. Check them over, then save.' : 'Filled in from your text. Check it over, then save.',
+    );
   }
 
   async function save(draft: RecipeDraft) {

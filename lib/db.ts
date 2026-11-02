@@ -1,7 +1,21 @@
 import { runDb } from './database';
 import { initFridgeTable } from './fridgeDb';
+import { initMealPlanTable } from './mealPlan';
 import { initProfileTable } from './profile';
 import type { Recipe, RecipeRow, Step } from '../types/recipe';
+import type { Nutrition } from './nutrition';
+
+function parseNutrition(raw: string | null | undefined): Nutrition | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as Nutrition;
+  } catch {
+    return null;
+  }
+}
+
+/** Cook a recipe this many times to unlock its collectible card. */
+export const CARD_UNLOCK_COOKS = 3;
 
 function rowToRecipe(row: RecipeRow): Recipe {
   return {
@@ -12,6 +26,8 @@ function rowToRecipe(row: RecipeRow): Recipe {
     source: row.source,
     sourceUrl: row.sourceUrl ?? null,
     servings: row.servings ?? null,
+    nutrition: parseNutrition(row.nutrition),
+    timesCooked: row.timesCooked ?? 0,
     createdAt: row.createdAt,
   };
 }
@@ -88,9 +104,16 @@ export async function initDb(): Promise<void> {
         if (!columns.some((c) => c.name === 'servings')) {
           await db.execAsync('ALTER TABLE recipes ADD COLUMN servings INTEGER');
         }
+        if (!columns.some((c) => c.name === 'nutrition')) {
+          await db.execAsync('ALTER TABLE recipes ADD COLUMN nutrition TEXT');
+        }
+        if (!columns.some((c) => c.name === 'timesCooked')) {
+          await db.execAsync('ALTER TABLE recipes ADD COLUMN timesCooked INTEGER NOT NULL DEFAULT 0');
+        }
       });
       await initFridgeTable();
       await initProfileTable();
+      await initMealPlanTable();
       await seedStarterRecipes();
     })().catch((error) => {
       initPromise = null;
@@ -103,8 +126,8 @@ export async function initDb(): Promise<void> {
 export async function saveRecipe(recipe: Recipe): Promise<void> {
   await runDb((db) =>
     db.runAsync(
-      `INSERT OR REPLACE INTO recipes (id, title, ingredients, steps, source, sourceUrl, servings, createdAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO recipes (id, title, ingredients, steps, source, sourceUrl, servings, nutrition, timesCooked, createdAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       recipe.id,
       recipe.title,
       JSON.stringify(recipe.ingredients),
@@ -112,9 +135,20 @@ export async function saveRecipe(recipe: Recipe): Promise<void> {
       recipe.source,
       recipe.sourceUrl ?? null,
       recipe.servings ?? null,
+      recipe.nutrition ? JSON.stringify(recipe.nutrition) : null,
+      recipe.timesCooked ?? 0,
       recipe.createdAt,
     ),
   );
+}
+
+/** Count a finished cook. Returns the new total. */
+export async function recordCook(id: string): Promise<number> {
+  return runDb(async (db) => {
+    await db.runAsync('UPDATE recipes SET timesCooked = COALESCE(timesCooked, 0) + 1 WHERE id = ?', id);
+    const row = await db.getFirstAsync<{ timesCooked: number }>('SELECT timesCooked FROM recipes WHERE id = ?', id);
+    return row?.timesCooked ?? 0;
+  });
 }
 
 export async function getRecipe(id: string): Promise<Recipe | null> {

@@ -12,7 +12,7 @@ import { PaperBackground } from '../../components/paper/PaperBackground';
 import { PaperButton } from '../../components/paper/PaperButton';
 import { PaperCard } from '../../components/paper/PaperCard';
 import { BackIcon } from '../../components/paper/UiIcons';
-import { getRecipe } from '../../lib/db';
+import { getRecipe, recordCook } from '../../lib/db';
 import { awardXp, getProfile, XP_PER_STEP, XP_RECIPE_BONUS } from '../../lib/profile';
 import { listStepIngredients } from '../../lib/stepIngredients';
 import { getPaperSceneKind, stepTimer as stepTimerFor } from '../../lib/stepSceneLayout';
@@ -33,7 +33,7 @@ export default function CookScreen() {
   const [pop, setPop] = useState(0);
   const [busy, setBusy] = useState(false);
   const [gameDone, setGameDone] = useState(false);
-  const [finale, setFinale] = useState<{ before: number; after: number; streak: number; earned: number } | null>(null);
+  const [finale, setFinale] = useState<{ before: number; after: number; streak: number; earned: number; cooks: number } | null>(null);
   const earnedRef = useRef(0);
   const lastXp = useRef(XP_PER_STEP);
   const [timers, setTimers] = useState<Record<number, TimerState>>({});
@@ -163,8 +163,15 @@ export default function CookScreen() {
       if (isLast) {
         const before = (await getProfile()).xp;
         const profile = await awardXp(stepXp, true);
+        const cooks = recipe ? await recordCook(recipe.id).catch(() => 0) : 0;
         earnedRef.current += stepXp;
-        setFinale({ before: before - (earnedRef.current - stepXp), after: profile.xp, streak: profile.streak, earned: earnedRef.current });
+        setFinale({
+          before: before - (earnedRef.current - stepXp),
+          after: profile.xp,
+          streak: profile.streak,
+          earned: earnedRef.current,
+          cooks,
+        });
       } else {
         await awardXp(stepXp);
         earnedRef.current += stepXp;
@@ -254,7 +261,9 @@ export default function CookScreen() {
             {recipe.title} · Step {stepIndex + 1} of {steps.length}
             {people !== baseServings ? ` · for ${people}` : ''}
           </Text>
-          <Animated.Text key={`text-${stepIndex}`} entering={FadeInRight.springify().damping(16)} style={styles.stepText}>
+          <Animated.Text key={`text-${stepIndex}`} entering={FadeInRight.springify().damping(16)}
+            style={[styles.stepText, step.text.length > 120 ? styles.stepTextLong : step.text.length > 60 ? styles.stepTextMid : null]}
+          >
             {step.text}
           </Animated.Text>
           <View style={styles.nav}>
@@ -288,6 +297,8 @@ export default function CookScreen() {
           xpBefore={finale.before}
           xpAfter={finale.after}
           streak={finale.streak}
+          cooks={finale.cooks}
+          onSeeCard={() => router.replace({ pathname: '/recipe/[id]', params: { id: recipe.id, card: '1' } })}
           onDone={() => router.back()}
           onAgain={() => {
             setFinale(null);
@@ -380,13 +391,22 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 9,
   },
+  // Rounded body font rather than the chunky display face, so long steps stay readable.
   stepText: {
     color: paper.ink,
-    fontFamily: fonts.display,
-    fontSize: 26,
-    lineHeight: 31,
+    fontFamily: fonts.bodyBold,
+    fontSize: 21,
+    lineHeight: 28,
     marginBottom: 14,
     marginTop: 4,
+  },
+  stepTextLong: {
+    fontSize: 16.5,
+    lineHeight: 23,
+  },
+  stepTextMid: {
+    fontSize: 18.5,
+    lineHeight: 25,
   },
   timer: {
     alignItems: 'center',

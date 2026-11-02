@@ -1,3 +1,5 @@
+import type { Nutrition } from '../lib/nutrition';
+
 export type Action = 'chop' | 'stir' | 'bake' | 'pour' | 'fry' | 'mix' | 'blend';
 
 export interface Step {
@@ -17,6 +19,10 @@ export interface Recipe {
   sourceUrl?: string | null;
   /** How many people the recipe was written for. */
   servings?: number | null;
+  /** Per-serving stats for the recipe card (estimated or typed in). */
+  nutrition?: Nutrition | null;
+  /** How many times the dish has been cooked to the end. The card unlocks at CARD_UNLOCK_COOKS. */
+  timesCooked?: number;
   createdAt: number;
 }
 
@@ -28,5 +34,7 @@ export interface RecipeRow {
   source: string;
   sourceUrl?: string | null;
   servings?: number | null;
+  nutrition?: string | null;
+  timesCooked?: number | null;
   createdAt: number;
 }

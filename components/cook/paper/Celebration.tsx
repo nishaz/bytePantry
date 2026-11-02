@@ -12,8 +12,9 @@ import Animated, {
   ZoomIn,
 } from 'react-native-reanimated';
 
+import { CARD_UNLOCK_COOKS } from '../../../lib/db';
 import { levelFor } from '../../../lib/profile';
-import { fonts, paper } from '../../../lib/theme';
+import { cutCorners, fonts, paper } from '../../../lib/theme';
 import { DishArt } from '../../paper/DishArt';
 import { Bob } from '../../paper/Motion';
 import { PaperButton } from '../../paper/PaperButton';
@@ -85,11 +86,16 @@ interface CelebrationProps {
   xpBefore: number;
   xpAfter: number;
   streak: number;
+  /** Total finished cooks of this recipe, including this one. */
+  cooks?: number;
+  onSeeCard?: () => void;
   onDone: () => void;
   onAgain: () => void;
 }
 
-export function Celebration({ title, earned, xpBefore, xpAfter, streak, onDone, onAgain }: CelebrationProps) {
+export function Celebration({ title, earned, xpBefore, xpAfter, streak, cooks = 0, onSeeCard, onDone, onAgain }: CelebrationProps) {
+  const justUnlocked = cooks === CARD_UNLOCK_COOKS;
+  const toGo = CARD_UNLOCK_COOKS - cooks;
   const before = levelFor(xpBefore);
   const after = levelFor(xpAfter);
   const levelUp = after.level > before.level;
@@ -119,7 +125,21 @@ export function Celebration({ title, earned, xpBefore, xpAfter, streak, onDone, 
           <Text style={styles.streak}>
             {streak} day streak · keep it going tomorrow
           </Text>
+          {cooks > 0 ? (
+            <View style={[styles.cardNote, justUnlocked && styles.cardNoteNew, cutCorners.b]}>
+              <Text style={[styles.cardNoteText, justUnlocked && styles.cardNoteTextNew]}>
+                {justUnlocked
+                  ? 'Recipe card unlocked!'
+                  : toGo > 0
+                    ? `Cooked ${cooks} of ${CARD_UNLOCK_COOKS} · ${toGo} more to unlock its card`
+                    : `Cooked ${cooks} times`}
+              </Text>
+            </View>
+          ) : null}
           <View style={styles.actions}>
+            {justUnlocked && onSeeCard ? (
+              <PaperButton label="See my card" color={paper.yellow} textColor={paper.ink} onPress={onSeeCard} />
+            ) : null}
             <PaperButton label="Back to kitchen" color={paper.green} onPress={onDone} />
             <PaperButton label="Cook it again" color={paper.kraft} textColor={paper.ink} size="sm" onPress={onAgain} />
           </View>
@@ -130,6 +150,26 @@ export function Celebration({ title, earned, xpBefore, xpAfter, streak, onDone, 
 }
 
 const styles = StyleSheet.create({
+  cardNote: {
+    backgroundColor: paper.kraft,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  cardNoteNew: {
+    backgroundColor: paper.yellow,
+  },
+  cardNoteText: {
+    color: paper.inkSoft,
+    fontFamily: fonts.bodyBold,
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  cardNoteTextNew: {
+    color: paper.ink,
+    fontFamily: fonts.display,
+    fontSize: 17,
+  },
   actions: {
     alignSelf: 'stretch',
     gap: 12,

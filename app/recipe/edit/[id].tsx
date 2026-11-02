@@ -62,6 +62,7 @@ export default function EditRecipeScreen() {
                 ingredients: recipe.ingredients,
                 steps: recipe.steps,
                 servings: recipe.servings ?? undefined,
+                nutrition: recipe.nutrition,
               }}
               submitLabel="Save changes"
               onSubmit={save}

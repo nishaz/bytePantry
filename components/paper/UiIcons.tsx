@@ -160,3 +160,33 @@ export function CheckIcon({ size = 16, color = paper.card, strokeWidth = 3 }: Ic
     </Svg>
   );
 }
+
+export function ShareIcon({ size = 22, color = paper.ink, strokeWidth = 2.4 }: IconProps) {
+  const s = stroke(color, strokeWidth);
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M12 15V3M7 8l5-5 5 5" {...s} />
+      <Path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" {...s} />
+    </Svg>
+  );
+}
+
+export function CalendarIcon({ size = 24, color = paper.ink, strokeWidth = 2.4 }: IconProps) {
+  const s = stroke(color, strokeWidth);
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Rect x="3.5" y="5" width="17" height="15" rx="2" {...s} />
+      <Path d="M3.5 10h17M8 3v4M16 3v4" {...s} />
+    </Svg>
+  );
+}
+
+export function BagIcon({ size = 20, color = paper.ink, strokeWidth = 2.4 }: IconProps) {
+  const s = stroke(color, strokeWidth);
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M5 7h14l-1.5 13h-11z" {...s} />
+      <Path d="M9 7a3 3 0 0 1 6 0" {...s} />
+    </Svg>
+  );
+}

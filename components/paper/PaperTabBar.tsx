@@ -2,7 +2,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { cutCorners, fonts, paper } from '../../lib/theme';
-import { BookIcon, FridgeIcon, HomeIcon, PlusIcon } from './UiIcons';
+import { BookIcon, CalendarIcon, FridgeIcon, HomeIcon, PlusIcon } from './UiIcons';
 
 /** The bits of expo-router's tab bar props we use (kept local to avoid deep imports). */
 interface TabBarProps {
@@ -17,6 +17,7 @@ const TABS: Record<string, { label: string; Icon: typeof HomeIcon }> = {
   index: { label: 'Kitchen', Icon: HomeIcon },
   fridge: { label: 'Pantry', Icon: FridgeIcon },
   recipes: { label: 'Recipes', Icon: BookIcon },
+  plan: { label: 'Plan', Icon: CalendarIcon },
 };
 
 export function PaperTabBar({ state, navigation }: TabBarProps) {
@@ -125,6 +126,6 @@ const styles = StyleSheet.create({
     gap: 2,
     justifyContent: 'center',
     minHeight: 52,
-    minWidth: 64,
+    minWidth: 58,
   },
 });
