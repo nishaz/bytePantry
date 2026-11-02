@@ -6,7 +6,6 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withDelay,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 
@@ -41,7 +40,7 @@ export function StorageView({ location, items, onSelect, onClose }: StorageViewP
   const light = useSharedValue(0);
 
   useEffect(() => {
-    open.value = withSpring(1, { damping: 13, stiffness: 90 });
+    open.value = withTiming(1, { duration: 520, easing: Easing.out(Easing.cubic) });
     light.value = withDelay(250, withTiming(1, { duration: 500, easing: Easing.out(Easing.quad) }));
   }, [light, open]);
 

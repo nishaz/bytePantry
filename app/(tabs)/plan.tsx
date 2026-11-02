@@ -10,7 +10,7 @@ import {
   View,
   type LayoutChangeEvent,
 } from 'react-native';
-import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown, ZoomIn, Easing } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DishArt } from '../../components/paper/DishArt';
@@ -400,7 +400,7 @@ export default function PlanScreen() {
                           ]}
                         >
                           {recipe ? (
-                            <Animated.View key={recipe.id} entering={ZoomIn.duration(220)} style={styles.slotFilled}>
+                            <Animated.View key={recipe.id} entering={FadeIn.duration(200)} style={styles.slotFilled}>
                               <DishArt title={recipe.title} size={40} />
                               <View style={styles.flex}>
                                 <Text style={[styles.slotLabel, { color: isHover ? paper.ink : st.text }]}>{s.label}</Text>

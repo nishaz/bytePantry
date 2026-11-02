@@ -1,12 +1,12 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown, ZoomIn } from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DishArt, dishColor, dishKindFor } from '../../components/paper/DishArt';
 import { IngredientArt } from '../../components/paper/IngredientArt';
-import { Bob, dealIn } from '../../components/paper/Motion';
+import { Bob, dealIn, popIn, tileIn } from '../../components/paper/Motion';
 import { PaperBackground } from '../../components/paper/PaperBackground';
 import { PaperButton } from '../../components/paper/PaperButton';
 import { PaperCard } from '../../components/paper/PaperCard';
@@ -145,7 +145,7 @@ export default function RecipeOverviewScreen() {
           </View>
         </View>
 
-        <Animated.View entering={FadeInDown.springify().damping(15)}>
+        <Animated.View entering={popIn()}>
           <PaperCard color={color} shape="d" tilt={-1} lift={6} contentStyle={styles.hero}>
             <Bob distance={6} rock={3} style={styles.heroArt}>
               <DishArt title={recipe.title} size={150} />
@@ -191,7 +191,7 @@ export default function RecipeOverviewScreen() {
             {recipe.ingredients.map((name, i) => {
               const have = !missing.has(name);
               return (
-                <Animated.View key={`${name}-${i}`} entering={ZoomIn.delay(120 + i * 50).springify().damping(12)} style={styles.ingCell}>
+                <Animated.View key={`${name}-${i}`} entering={tileIn(i)} style={styles.ingCell}>
                   <PaperCard shape={i % 2 ? 'b' : 'c'} tilt={i % 2 ? 1.5 : -1.5} lift={3} contentStyle={styles.ing}>
                     <IngredientArt name={name} size={44} />
                     <Text style={styles.ingName} numberOfLines={3}>
@@ -285,7 +285,7 @@ export default function RecipeOverviewScreen() {
       {confirmDelete ? (
         <Animated.View entering={FadeIn.duration(150)} style={styles.backdrop}>
           <Pressable accessibilityLabel="Cancel" style={StyleSheet.absoluteFill} onPress={() => setConfirmDelete(false)} />
-          <Animated.View entering={ZoomIn.springify().damping(13)} style={styles.confirmWrap}>
+          <Animated.View entering={popIn()} style={styles.confirmWrap}>
             <PaperCard shape="d" tilt={-1} lift={6} contentStyle={styles.confirm}>
               <Text style={styles.confirmTitle}>Delete this recipe?</Text>
               <Text style={styles.confirmText}>"{recipe.title}" will be removed from your recipe box. This can't be undone.</Text>

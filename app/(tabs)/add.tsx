@@ -1,10 +1,10 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Bob } from '../../components/paper/Motion';
+import { Bob, popIn } from '../../components/paper/Motion';
 import { PaperBackground } from '../../components/paper/PaperBackground';
 import { PaperButton } from '../../components/paper/PaperButton';
 import { PaperCard } from '../../components/paper/PaperCard';
@@ -12,7 +12,7 @@ import { LinkIcon, MicIcon, PencilIcon } from '../../components/paper/UiIcons';
 import { RecipeForm, type RecipeDraft } from '../../components/recipe/RecipeForm';
 import { createRecipeId, saveRecipe } from '../../lib/db';
 import { ImportError, importRecipeFromLink } from '../../lib/importRecipe';
-import { parseFreeTextRecipe } from '../../lib/recipeParse';
+import { parseFreeTextRecipe, type StatedNutrition } from '../../lib/recipeParse';
 import { parseServings } from '../../lib/scaleIngredients';
 import { suggestSteps } from '../../lib/suggestSteps';
 import { inferAction } from '../../lib/stepSceneLayout';
@@ -28,12 +28,20 @@ export default function AddScreen() {
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState('');
   const [importNote, setImportNote] = useState('');
-  const [prefill, setPrefill] = useState<(Partial<Omit<RecipeDraft, 'nutrition'>> & { stepsGuessed?: boolean }) | undefined>(undefined);
+  const [prefill, setPrefill] = useState<
+    (Partial<Omit<RecipeDraft, 'nutrition'>> & { stepsGuessed?: boolean; statedNutrition?: StatedNutrition | null }) | undefined
+  >(undefined);
   const [imported, setImported] = useState<{ source: string; sourceUrl: string } | null>(null);
   const [pasteText, setPasteText] = useState('');
 
   /** Returns true when the steps had to be drafted because the post only listed ingredients. */
-  function fillForm(draft: { title: string; ingredients: string[]; steps: string[]; servings: number | null }): boolean {
+  function fillForm(draft: {
+    title: string;
+    ingredients: string[];
+    steps: string[];
+    servings: number | null;
+    nutrition?: StatedNutrition | null;
+  }): boolean {
     const guessed = draft.steps.length === 0 && draft.ingredients.length > 0;
     const steps = guessed ? suggestSteps(draft.title, draft.ingredients) : draft.steps;
     setPrefill({
@@ -42,6 +50,7 @@ export default function AddScreen() {
       steps: steps.map((text) => ({ text, action: inferAction(text), ingredient: '', tool: '' })),
       servings: draft.servings ?? undefined,
       stepsGuessed: guessed,
+      statedNutrition: draft.nutrition ?? null,
     });
     setFormKey((k) => k + 1);
     setShowForm(true);
@@ -213,7 +222,7 @@ export default function AddScreen() {
           </View>
 
           {showForm ? (
-            <Animated.View entering={FadeInDown.springify().damping(15)}>
+            <Animated.View entering={popIn()}>
               <RecipeForm key={formKey} initial={prefill} submitLabel="Save & start cooking" onSubmit={save} />
             </Animated.View>
           ) : null}

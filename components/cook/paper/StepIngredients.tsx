@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, ZoomIn } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
+
+import { tileIn } from '../../paper/Motion';
 
 import { cutCorners, fonts, paper } from '../../../lib/theme';
 import { IngredientArt } from '../../paper/IngredientArt';
@@ -21,7 +23,7 @@ export function StepIngredients({ items, stepKey }: { items: string[]; stepKey: 
         {shown.map((name, i) => (
           <Animated.View
             key={`${stepKey}-${i}-${name}`}
-            entering={i < COLLAPSED ? ZoomIn.delay(i * 60).springify().damping(13) : FadeIn}
+            entering={tileIn(i)}
             style={[styles.item, i % 2 ? cutCorners.c : cutCorners.b]}
           >
             <IngredientArt name={name} size={30} shadow={false} />

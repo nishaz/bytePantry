@@ -39,7 +39,12 @@ function parseSteps(raw: string, previous: Step[]): Step[] {
 }
 
 interface RecipeFormProps {
-  initial?: Partial<Omit<RecipeDraft, 'nutrition'>> & { nutrition?: Nutrition | null; stepsGuessed?: boolean };
+  initial?: Partial<Omit<RecipeDraft, 'nutrition'>> & {
+    nutrition?: Nutrition | null;
+    /** Numbers the imported post listed itself; they fill the matching boxes. */
+    statedNutrition?: Partial<Record<NutrientKey, number>> | null;
+    stepsGuessed?: boolean;
+  };
   submitLabel: string;
   onSubmit: (draft: RecipeDraft) => Promise<void>;
 }
@@ -54,6 +59,12 @@ export function RecipeForm({ initial, submitLabel, onSubmit }: RecipeFormProps) 
   const [stepsGuessed, setStepsGuessed] = useState(false);
   // Only the numbers the cook typed. Everything else follows the live estimate.
   const [nutritionEdits, setNutritionEdits] = useState<Partial<Record<NutrientKey, string>>>(() => {
+    const stated = initial?.statedNutrition;
+    if (stated) {
+      return Object.fromEntries(
+        NUTRIENT_FIELDS.filter((f) => stated[f.key] !== undefined).map((f) => [f.key, String(stated[f.key])]),
+      );
+    }
     const n = initial?.nutrition;
     if (!n || n.estimated) return {};
     return Object.fromEntries(NUTRIENT_FIELDS.map((f) => [f.key, String(n[f.key])]));
@@ -177,7 +188,11 @@ export function RecipeForm({ initial, submitLabel, onSubmit }: RecipeFormProps) 
         {ingredients.length === 0
           ? 'Add ingredients and we will estimate these for the recipe card.'
           : edited
-            ? 'Using your numbers.'
+            ? initial?.statedNutrition && Object.keys(nutritionEdits).length < NUTRIENT_FIELDS.length
+              ? 'Highlighted numbers came from the post; the rest are estimated.'
+              : initial?.statedNutrition
+                ? 'Numbers from the post. Tap one to change it.'
+                : 'Using your numbers.'
             : `Estimated from ${coverage.known} of ${coverage.total} ingredients. Tap a number to change it.`}
       </Text>
       <View style={styles.nutriRow}>

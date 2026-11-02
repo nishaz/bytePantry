@@ -1,7 +1,7 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import Animated, { FadeIn, FadeInRight, ZoomIn } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeInRight } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Celebration, ConfettiBurst, XpPop } from '../../components/cook/paper/Celebration';
@@ -233,7 +233,7 @@ export default function CookScreen() {
 
       <View style={[styles.cardWrap, { paddingBottom: Math.max(insets.bottom, 14) }]}>
         {stepTimer ? (
-          <Animated.View key={`timer-${stepIndex}`} entering={ZoomIn.springify().damping(13)} style={styles.timerWrap}>
+          <Animated.View key={`timer-${stepIndex}`} entering={FadeIn.duration(200)} style={styles.timerWrap}>
             <KitchenTimer
               timer={stepTimer}
               note={timerInfo?.note ?? ''}
@@ -261,7 +261,7 @@ export default function CookScreen() {
             {recipe.title} · Step {stepIndex + 1} of {steps.length}
             {people !== baseServings ? ` · for ${people}` : ''}
           </Text>
-          <Animated.Text key={`text-${stepIndex}`} entering={FadeInRight.springify().damping(16)}
+          <Animated.Text key={`text-${stepIndex}`} entering={FadeInRight.duration(220).easing(Easing.out(Easing.cubic))}
             style={[styles.stepText, step.text.length > 120 ? styles.stepTextLong : step.text.length > 60 ? styles.stepTextMid : null]}
           >
             {step.text}

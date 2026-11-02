@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
 import Animated, {
   Easing,
+  FadeIn,
   FadeInDown,
   useAnimatedStyle,
   useSharedValue,
@@ -61,7 +62,17 @@ export function Wiggle({ children, style }: { children: ReactNode; style?: Style
 
 /** Staggered "dealt onto the table" entrance for lists of cards. */
 export function dealIn(index: number) {
-  return FadeInDown.delay(80 + index * 70)
-    .springify()
-    .damping(14);
+  return FadeInDown.delay(40 + Math.min(index, 8) * 35)
+    .duration(240)
+    .easing(Easing.out(Easing.cubic));
+}
+
+/** Calm entrance for dialogs, cards and badges: a short fade with a small rise, no bounce. */
+export function popIn(delay = 0) {
+  return FadeInDown.delay(delay).duration(200).easing(Easing.out(Easing.cubic));
+}
+
+/** Calm entrance for small tiles in a grid. */
+export function tileIn(index: number) {
+  return FadeIn.delay(Math.min(index, 10) * 30).duration(200);
 }

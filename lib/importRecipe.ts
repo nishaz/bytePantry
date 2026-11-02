@@ -9,6 +9,7 @@ import {
   parseJsonLdRecipe,
   youtubeDescription,
   type LinkSource,
+  type StatedNutrition,
 } from './recipeParse';
 import { parseServings } from './scaleIngredients';
 
@@ -17,6 +18,8 @@ export interface ImportedRecipe {
   ingredients: string[];
   steps: string[];
   servings: number | null;
+  /** Calories/macros the post itself listed, per serving. */
+  nutrition: StatedNutrition | null;
   source: LinkSource;
   sourceUrl: string;
   /** True when we found ingredients and steps; false means the user should fill gaps in. */
@@ -53,7 +56,7 @@ async function get(url: string, accept = 'text/html'): Promise<Response> {
 }
 
 function finish(
-  parsed: { title: string; ingredients: string[]; steps: string[] },
+  parsed: { title: string; ingredients: string[]; steps: string[]; nutrition?: StatedNutrition | null },
   servings: number | null,
   source: LinkSource,
   sourceUrl: string,
@@ -67,6 +70,7 @@ function finish(
   }
   return {
     ...parsed,
+    nutrition: parsed.nutrition ?? null,
     servings,
     source,
     sourceUrl,

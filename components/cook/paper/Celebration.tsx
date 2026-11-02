@@ -7,16 +7,14 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withDelay,
-  withSpring,
   withTiming,
-  ZoomIn,
 } from 'react-native-reanimated';
 
 import { CARD_UNLOCK_COOKS } from '../../../lib/db';
 import { levelFor } from '../../../lib/profile';
 import { cutCorners, fonts, paper } from '../../../lib/theme';
 import { DishArt } from '../../paper/DishArt';
-import { Bob } from '../../paper/Motion';
+import { Bob, popIn } from '../../paper/Motion';
 import { PaperButton } from '../../paper/PaperButton';
 import { PaperCard } from '../../paper/PaperCard';
 
@@ -101,14 +99,14 @@ export function Celebration({ title, earned, xpBefore, xpAfter, streak, cooks = 
   const levelUp = after.level > before.level;
   const fill = useSharedValue(levelUp ? 0 : before.into / before.span);
   useEffect(() => {
-    fill.value = withDelay(500, withSpring(after.into / after.span, { damping: 14 }));
+    fill.value = withDelay(400, withTiming(after.into / after.span, { duration: 700, easing: Easing.out(Easing.cubic) }));
   }, [after.into, after.span, fill]);
   const fillStyle = useAnimatedStyle(() => ({ width: `${Math.max(0.04, fill.value) * 100}%` }));
 
   return (
     <Animated.View entering={FadeIn.duration(200)} style={styles.backdrop}>
       <ConfettiBurst count={32} />
-      <Animated.View entering={ZoomIn.springify().damping(10)} style={styles.cardWrap}>
+      <Animated.View entering={popIn(80)} style={styles.cardWrap}>
         <PaperCard shape="d" tilt={-1.5} lift={7} contentStyle={styles.card}>
           <Bob distance={6} rock={4}>
             <DishArt title={title} size={130} />

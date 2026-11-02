@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, useSharedValue, withSpring, ZoomIn } from 'react-native-reanimated';
+import Animated, { FadeIn, useSharedValue, withSpring } from 'react-native-reanimated';
 
 import { fonts, paper } from '../../../lib/theme';
 import { PaperCard } from '../../paper/PaperCard';
@@ -179,7 +179,7 @@ export function InteractiveScene({ kind, ingredients, size, onComplete }: Intera
         <Animated.View entering={FadeIn.delay(300)} style={styles.meterWrap}>
           <PaperCard shape="c" tilt={-1} lift={3} color={done ? paper.green : paper.card} contentStyle={styles.meter}>
             {done ? (
-              <Animated.Text entering={ZoomIn.springify().damping(10)} style={[styles.prompt, styles.donePrompt]}>
+              <Animated.Text entering={FadeIn.duration(200)} style={[styles.prompt, styles.donePrompt]}>
                 {game.done} +{GAME_BONUS_XP} bonus XP
               </Animated.Text>
             ) : (

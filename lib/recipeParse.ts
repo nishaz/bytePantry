@@ -7,7 +7,91 @@ export interface ParsedRecipe {
   title: string;
   ingredients: string[];
   steps: string[];
+  /** Per-serving numbers the post stated itself ("520 cal, 45g protein"). */
+  nutrition?: StatedNutrition | null;
 }
+
+export interface StatedNutrition {
+  calories?: number;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
+  fiber?: number;
+}
+
+/* ---------------- nutrition the creator wrote down ---------------- */
+
+const NUM = String.raw`(\d{1,4}(?:[.,]\d)?)`;
+const NUTRIENT_WORDS: [keyof StatedNutrition, string][] = [
+  ['calories', String.raw`(?:k?cals?|kcal|calories|cal|energy)`],
+  ['protein', String.raw`(?:protein|prot|p)`],
+  ['carbs', String.raw`(?:carbs?|carbohydrates?|c)`],
+  ['fat', String.raw`(?:fats?|f)`],
+  ['fiber', String.raw`(?:fib(?:er|re)s?)`],
+];
+
+function toNum(v: string): number {
+  return Math.round(Number(v.replace(',', '.')));
+}
+
+/**
+ * Find stated macros anywhere in a caption: "520 cal", "Calories: 520", "45g protein", "Protein 45g",
+ * "P45 C30 F12", "45P / 30C / 12F". Single letters only count next to a number with "g" or in a P/C/F run.
+ */
+export function parseStatedNutrition(raw: string): StatedNutrition | null {
+  const text = ' ' + raw.replace(/\s+/g, ' ') + ' ';
+  // Captions write macros one of two ways: "Protein: 45g" (label first) or "45g protein" (number first).
+  // Whichever style shows up first in the caption is used for every macro, so "P 30g C 45g" isn't misread.
+  const labelFirstAt = text.search(/\b(protein|carbs?|carbohydrates?|fats?|fib(?:er|re)|[pcf])\s*[:=]?\s*\d/i);
+  const numberFirstAt = text.search(/\d\s*g\s*(protein|carbs?|carbohydrates?|fats?|fib(?:er|re)|[pcf])\b/i);
+  const labelFirst = labelFirstAt >= 0 && (numberFirstAt < 0 || labelFirstAt < numberFirstAt);
+  const out: StatedNutrition = {};
+  for (const [key, word] of NUTRIENT_WORDS) {
+    let m: RegExpMatchArray | null = null;
+    if (key === 'calories') {
+      m =
+        text.match(new RegExp(String.raw`(?<![\w.])${NUM}\s*${word}\b`, 'i')) ??
+        text.match(new RegExp(String.raw`\b${word}\s*[:=\-–]?\s*${NUM}(?![\w])`, 'i'));
+    } else if (labelFirst) {
+      m = text.match(new RegExp(String.raw`\b${word}\s*[:=\-–]?\s*${NUM}\s*(?:g|grams?)?(?![\w])`, 'i'));
+    } else {
+      m = text.match(new RegExp(String.raw`(?<![\w.])${NUM}\s*(?:g|grams?)\s*${word}\b`, 'i'));
+    }
+    if (!m) continue;
+    const value = toNum(m[1]);
+    if (key === 'calories' ? value < 20 || value > 4000 : value > 400) continue;
+    out[key] = value;
+  }
+  const found = Object.keys(out).length;
+  // A lone single-letter hit is too likely to be a false match; need calories, a spelled-out macro, or two macros.
+  if (found === 0 || (found === 1 && out.calories === undefined && !/protein|carb|fat|fib/i.test(raw))) return null;
+  return out;
+}
+
+const NUTRITION_LINE =
+  /\b(\d+\s*(k?cals?|kcal|calories)|(calories|kcal|protein|carbs?|carbohydrates?|fats?|fib(er|re)|macros?|nutrition)\b\s*[:\-–]?\s*\d|\d+\s*g\s*(protein|carbs?|fats?|fib(er|re)))/i;
+
+/** Lines in a caption that are about the post, not the cooking. */
+const NOISE =
+  /(\bfollow\b|\blike (and|&|\+) (save|share)|\bsave (this|it|for later)\b|\bshare (this|with)\b|\bcomment\b|link in (my )?bio|\bsubscribe\b|\btag (a|your)\b|\bdm (me|for)\b|\bfull recipe\b|\brecipe (below|in the comments)\b|\bturn on (post )?notifications\b|\bmore recipes\b|\bcode\b.*\boff\b|\bad\b|\bsponsored\b|\bhttps?:\/\/|\bwww\.)/i;
+const META_LINE =
+  /^(prep|cook|total|bake|chill)(ing)?\s*(time)?\s*[:\-–]|^(serves|servings?|makes|yield|portions?)\b|^(per serving|nutrition|macros?)\b|^(time|ready in)\s*[:\-–]/i;
+
+/** True for caption lines that are nutrition, servings/timing info, calls to action or links. */
+export function isCaptionNoise(line: string): boolean {
+  const l = line.trim();
+  if (!l) return true;
+  if (/^@[\w.]+/.test(l)) return true;
+  if (NOISE.test(l)) return true;
+  if (META_LINE.test(l)) return true;
+  // A short line that is mostly numbers about nutrition.
+  if (NUTRITION_LINE.test(l) && !COOKING_VERB_LOOSE.test(l)) return true;
+  // Only emoji / punctuation left.
+  return !/[\p{L}\p{N}]/u.test(l);
+}
+
+const COOKING_VERB_LOOSE =
+  /\b(add|bake|boil|chop|cook|combine|fry|mix|pour|preheat|simmer|stir|whisk|blend|roast|serve|top)\b/i;
 
 const ENTITIES: Record<string, string> = {
   amp: '&',
@@ -116,7 +200,19 @@ export function parseJsonLdRecipe(html: string): ParsedRecipe | null {
       .filter(Boolean);
     const steps = instructionsOf(node.recipeInstructions).map(cleanLine).filter(Boolean);
     const title = textOf(node.name) || 'Imported recipe';
-    if (ingredients.length || steps.length) return { title, ingredients, steps };
+    const n = node.nutrition as Record<string, Json> | undefined;
+    const nutrition = n
+      ? parseStatedNutrition(
+          [
+            n.calories ? `${textOf(n.calories)} calories` : '',
+            n.proteinContent ? `protein: ${textOf(n.proteinContent)}` : '',
+            n.carbohydrateContent ? `carbs: ${textOf(n.carbohydrateContent)}` : '',
+            n.fatContent ? `fat: ${textOf(n.fatContent)}` : '',
+            n.fiberContent ? `fiber: ${textOf(n.fiberContent)}` : '',
+          ].join(' '),
+        )
+      : null;
+    if (ingredients.length || steps.length) return { title, ingredients, steps, nutrition };
   }
   return null;
 }
@@ -181,14 +277,15 @@ export function parseFreeTextRecipe(raw: string, fallbackTitle = 'Imported recip
     // "(serves 4)" would otherwise look like a numbered step "4)".
     .replace(/\(\s*((?:serves|servings?|for|makes)\b[^)]*)\)/gi, ' $1 ')
     // Put inline section headers and numbered steps on their own lines.
-    .replace(/\s*\b(ingredients?|method|instructions|directions|steps)\s*:\s*/gi, '\n$1:\n')
+    .replace(/\s*\b(ingredients?|method|instructions|directions|steps|you(?:'|’)ll need|what you need)\s*:\s*/gi, '\n$1:\n')
     .replace(/\s+(?=(?:step\s*)?\d{1,2}[.)]\s+\D)/gi, '\n');
 
-  let lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
-  // One long unstructured paragraph: work sentence by sentence instead.
-  if (lines.length <= 2 && !lines.some((l) => INGREDIENT_HEADER.test(l) || STEP_HEADER.test(l.replace(/[:：]\s*$/, '')))) {
-    lines = lines.flatMap((l) => l.split(/(?<=[.!?])\s+(?=[A-Z0-9])/)).map((l) => l.trim()).filter(Boolean);
-  }
+  // Work sentence by sentence, so "Mix it all. Chill overnight. Link in bio!" keeps the steps and drops the plug.
+  const lines = text
+    .split('\n')
+    .flatMap((l) => l.split(/(?<=[.!?])\s+(?=[A-Z0-9])/))
+    .map((l) => l.trim())
+    .filter(Boolean);
 
   let title = '';
   const ingredients: string[] = [];
@@ -207,10 +304,18 @@ export function parseFreeTextRecipe(raw: string, fallbackTitle = 'Imported recip
     }
     const line = cleanLine(original);
     if (!line) continue;
+    if (isCaptionNoise(line)) {
+      // "Chicken pasta | 520 cal" still names the dish: keep the part before the numbers.
+      if (mode === 'intro' && !title) {
+        const named = line.split(/\s*[|•·([–—]\s*|\s+-\s+|\s*,\s*(?=\d)/)[0].trim();
+        if (named && named !== line && !isCaptionNoise(named) && !looksLikeIngredient(named)) title = named.replace(/[!.:]+$/, '');
+      }
+      continue;
+    }
 
     if (mode === 'intro') {
       if (!title && !looksLikeIngredient(line) && !looksLikeStep(line)) {
-        title = line.replace(/[!.]+$/, '');
+        title = line.replace(/[!.:]+$/, '');
         continue;
       }
       if (looksLikeIngredient(line)) ingredients.push(...splitIngredientLine(line));
@@ -218,7 +323,7 @@ export function parseFreeTextRecipe(raw: string, fallbackTitle = 'Imported recip
       continue;
     }
     if (mode === 'ingredients') {
-      if (looksLikeStep(line) && !looksLikeIngredient(line) && /^\d/.test(original.trim())) {
+      if (looksLikeStep(line) && !looksLikeIngredient(line)) {
         mode = 'steps';
         steps.push(line);
       } else {
@@ -226,7 +331,8 @@ export function parseFreeTextRecipe(raw: string, fallbackTitle = 'Imported recip
       }
       continue;
     }
-    steps.push(line);
+    // In the method section, keep real instructions; skip chatty sign-offs ("Enjoy!", "So good").
+    if (looksLikeStep(line) || /^\s*(step\s*)?\d{1,2}\s*[.):-]/i.test(original) || line.split(' ').length >= 6) steps.push(line);
   }
 
   // A caption with no step lines at all: treat each sentence that sounds like an action as a step.
@@ -234,7 +340,7 @@ export function parseFreeTextRecipe(raw: string, fallbackTitle = 'Imported recip
     const sentences = splitSentencesOrLines(lines.join(' '));
     for (const s of sentences) {
       const c = cleanLine(s);
-      if (looksLikeStep(c) && !ingredients.includes(c)) steps.push(c);
+      if (looksLikeStep(c) && !isCaptionNoise(c) && !ingredients.includes(c)) steps.push(c);
     }
   }
 
@@ -249,10 +355,12 @@ export function parseFreeTextRecipe(raw: string, fallbackTitle = 'Imported recip
     }
   }
 
+  const tidySteps = steps.map((st) => st.replace(/[\s,(]*\b(serves|makes|for)\s+\d+\s*(people|servings?)?\)?\s*$/i, '').trim()).filter(Boolean);
   return {
     title: shortenTitle(title) || fallbackTitle,
     ingredients: dedupe(ingredients).slice(0, 40),
-    steps: dedupe(steps).slice(0, 30),
+    steps: dedupe(tidySteps).slice(0, 30),
+    nutrition: parseStatedNutrition(text),
   };
 }
 
@@ -268,6 +376,7 @@ function shortenTitle(title: string): string {
   const t = title
     .replace(/\s*[|–—-]\s*(tiktok|instagram|youtube).*$/i, '')
     .replace(/[\s,.(-]*\b(serves|servings?|for)\s*:?\s*\d+\b.*$/i, '')
+    .replace(/\s*[|•·,([–—-]\s*\d+\s*(k?cals?|kcal|calories|g\b).*$/i, '')
     .replace(/\p{Extended_Pictographic}|\uFE0F/gu, '')
     .replace(/[\s!.,:;-]+$/, '')
     .replace(/\s+/g, ' ')

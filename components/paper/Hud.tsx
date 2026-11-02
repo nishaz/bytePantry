@@ -6,7 +6,6 @@ import Animated, {
   useSharedValue,
   withRepeat,
   withSequence,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 
@@ -22,7 +21,7 @@ export function XpBar({ xp }: { xp: number }) {
   const fill = useSharedValue(0);
 
   useEffect(() => {
-    fill.value = withSpring(ratio, { damping: 12, stiffness: 90 });
+    fill.value = withTiming(ratio, { duration: 600, easing: Easing.out(Easing.cubic) });
   }, [fill, ratio]);
 
   const fillStyle = useAnimatedStyle(() => ({ width: `${Math.max(0.04, fill.value) * 100}%` }));
