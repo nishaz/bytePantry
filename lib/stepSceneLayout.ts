@@ -60,35 +60,142 @@ export function getSceneSurface(equipment: SceneEquipment): SceneSurface {
   }
 }
 
-export function inferAction(text: string): Action {
-  const lower = text.toLowerCase();
-  if (/\b(chop|dice|mince|slice|cut)\b/.test(lower)) return 'chop';
-  if (/\b(fry|saut[eé]|sear)\b/.test(lower)) return 'fry';
-  if (/\b(bake|roast)\b/.test(lower)) return 'bake';
-  if (/\b(blend|puree|smoothie)\b/.test(lower)) return 'blend';
-  if (/\b(stir|whisk|simmer|boil)\b/.test(lower)) return 'stir';
-  if (/\b(pour|drizzle|add)\b/.test(lower)) return 'pour';
-  if (/\b(mix|combine|fold)\b/.test(lower)) return 'mix';
-  return 'mix';
+export type PaperSceneKind = 'board' | 'pan' | 'pot' | 'oven' | 'blender' | 'bowl';
+
+/** Where the cooking happens, if the step names it ("in the same pan", "transfer to a blender"). */
+const EQUIPMENT_WORDS: [RegExp, PaperSceneKind][] = [
+  [/\b(blender|food processor|nutribullet|stick blender|hand blender)\b/, 'blender'],
+  [/\b(frying pan|fry pan|skillet|wok|griddle|pan)\b/, 'pan'],
+  [/\b(saucepan|stockpot|pot|dutch oven|casserole)\b/, 'pot'],
+  [/\b(oven|baking (tray|sheet|dish|tin)|roasting tin|loaf (pan|tin)|cake tin|air ?fryer)\b/, 'oven'],
+  [/\b(chopping board|cutting board|board)\b/, 'board'],
+  [/\b(bowl|jug)\b/, 'bowl'],
+];
+
+/** Cooking verbs, each with the scene it happens in. Earliest verb in the step wins. */
+const VERB_SCENES: [RegExp, PaperSceneKind][] = [
+  [/\b(chop|chopped|dice|mince|slice|cut|grate|peel|halve|quarter|shred|julienne|deseed)\b/, 'board'],
+
+  [/\b(fry|fried|saut[eé]e?|sear|melt|soften|brown|caramel[iz]se|toast|stir[- ]fry|crisp|flip|scramble|pan[- ]fry)\b/, 'pan'],
+  [/\b(bake|roast|broil|grill|air[- ]fry)\b/, 'oven'],
+  [/\b(blend|blitz|pur[eé]e|process|smoothie)\b/, 'blender'],
+  [/\b(simmer|boil|poach|stew|reduce|bring (it )?to (the|a) boil|steam)\b/, 'pot'],
+  [/\b(whisk|beat|mix|combine|fold|knead|marinate|toss|stir together|mash|dress)\b/, 'bowl'],
+];
+
+/** Assembling on the counter (rolling, filling, layering) only when nothing else names a place. */
+const ASSEMBLY = /\b(roll|wrap|assemble|layer|spread|fill|stuff|crumble|thread|skewer|shape)\b/;
+
+/** Steps like "add the spinach" or "season well" happen wherever the food already is. */
+const FOLLOW_ON = /\b(add|pour|season|stir|cook|heat|tip|transfer|return|leave|let|cover|serve|top|sprinkle|squeeze)\b/;
+
+function firstHit(lower: string, table: [RegExp, PaperSceneKind][]): { kind: PaperSceneKind; at: number } | null {
+  let best: { kind: PaperSceneKind; at: number } | null = null;
+  for (const [re, kind] of table) {
+    const m = lower.match(re);
+    if (m && m.index !== undefined && (!best || m.index < best.at)) best = { kind, at: m.index };
+  }
+  return best;
 }
 
-/** Which paper cook scene to show for a step. */
-export function getPaperSceneKind(step: Step): 'board' | 'pan' | 'pot' | 'oven' | 'blender' | 'bowl' {
-  const tool = step.tool.trim().toLowerCase();
-  const text = step.text.toLowerCase();
-  if (tool.includes('bowl') || (!tool && /\b(whisk|beat|mix|combine|fold|knead)\b/.test(text))) return 'bowl';
-  switch (getSceneEquipment(step)) {
-    case 'cutting_board':
-      return 'board';
-    case 'pan':
-      return 'pan';
-    case 'oven':
-      return 'oven';
-    case 'blender':
-      return 'blender';
-    default:
-      return step.action === 'mix' ? 'bowl' : 'pot';
+/** Scene for a piece of step text, or null when the text alone doesn't say. */
+export function sceneFromText(text: string): PaperSceneKind | null {
+  const lower = text.toLowerCase();
+  // "Transfer to a blender and blitz" names the blender; "in the same pan" names the pan.
+  const equipment = firstHit(lower, EQUIPMENT_WORDS);
+  const verb = firstHit(lower, VERB_SCENES);
+  if (equipment && verb) {
+    // A knife verb happens on the board even if a pan is mentioned later ("slice, then add to the pan").
+    if (verb.kind === 'board' && verb.at < equipment.at) return 'board';
+    return equipment.kind;
   }
+  return equipment?.kind ?? verb?.kind ?? (ASSEMBLY.test(lower) ? 'board' : null);
+}
+
+export function inferAction(text: string): Action {
+  switch (sceneFromText(text)) {
+    case 'board':
+      return 'chop';
+    case 'pan':
+      return 'fry';
+    case 'oven':
+      return 'bake';
+    case 'blender':
+      return 'blend';
+    case 'pot':
+      return 'stir';
+    case 'bowl':
+      return 'mix';
+    default:
+      return /\b(pour|drizzle|add)\b/i.test(text) ? 'pour' : 'mix';
+  }
+}
+
+function sceneFromTool(tool: string): PaperSceneKind | null {
+  const t = tool.trim().toLowerCase();
+  if (!t) return null;
+  return firstHit(t, EQUIPMENT_WORDS)?.kind ?? null;
+}
+
+/**
+ * Which paper cook scene to show for a step. `previous` is the scene of the step before, so
+ * "Add the lentils and season" keeps showing the pot the food is already in.
+ */
+export function getPaperSceneKind(step: Step, previous: PaperSceneKind | null = null): PaperSceneKind {
+  const fromTool = sceneFromTool(step.tool);
+  if (fromTool) return fromTool;
+  const fromText = sceneFromText(step.text);
+  if (fromText) return fromText;
+  // Food stays in a pan, pot, bowl or oven between steps; it doesn't stay in the blender or on the board.
+  const carries = previous === 'pan' || previous === 'pot' || previous === 'bowl' || previous === 'oven';
+  if (carries && FOLLOW_ON.test(step.text.toLowerCase())) return previous;
+  if (/\b(cook|heat)\b/i.test(step.text)) return 'pan';
+  return carries ? previous : 'bowl';
+}
+
+/** Scene for every step in order, carrying the pot/pan forward through "add…" steps. */
+export function sceneKindsFor(steps: Step[]): PaperSceneKind[] {
+  const out: PaperSceneKind[] = [];
+  let prev: PaperSceneKind | null = null;
+  for (const step of steps) {
+    const kind = getPaperSceneKind(step, prev);
+    out.push(kind);
+    prev = kind;
+  }
+  return out;
+}
+
+/**
+ * Split a step that does two different things in two places
+ * ("Simmer for 10 minutes. Season well & blend until smooth.") into one step per place.
+ * Sentences that don't name a place of their own ("Season well.") stay with the one before.
+ */
+export function splitMixedSteps(steps: Step[]): Step[] {
+  const out: Step[] = [];
+  for (const step of steps) {
+    const sentences = step.text.split(/(?<=[.!?])\s+(?=[A-Z])/).map((x) => x.trim()).filter(Boolean);
+    if (sentences.length < 2 || step.tool.trim()) {
+      out.push(step);
+      continue;
+    }
+    const groups: { text: string; kind: PaperSceneKind | null }[] = [];
+    for (const sentence of sentences) {
+      const kind = sceneFromText(sentence);
+      const last = groups[groups.length - 1];
+      if (last && (kind === null || last.kind === null || kind === last.kind)) {
+        last.text += ` ${sentence}`;
+        last.kind = last.kind ?? kind;
+      } else {
+        groups.push({ text: sentence, kind });
+      }
+    }
+    if (groups.length < 2) {
+      out.push(step);
+      continue;
+    }
+    for (const g of groups) out.push({ ...step, text: g.text, action: inferAction(g.text) });
+  }
+  return out;
 }
 
 /** Minutes mentioned in a step ("simmer for 10 minutes"), if any. */

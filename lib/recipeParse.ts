@@ -365,11 +365,22 @@ export function parseFreeTextRecipe(raw: string, fallbackTitle = 'Imported recip
 }
 
 /** "200g pasta, 2 eggs, salt" on one line becomes three ingredients. */
+const PREP_NOTE =
+  /^(finely |roughly |thinly |lightly |freshly )?(diced|chopped|minced|sliced|grated|peeled|crushed|drained|rinsed|halved|quartered|softened|melted|beaten|cubed|shredded|torn|deseeded|trimmed|zested|juiced|to taste|optional|for serving|to serve|divided|at room temperature|plus extra( for \w+)?)( and \w+)?$/i;
+
+/** "200g pasta, 2 eggs, salt" on one line becomes three ingredients; "1 tin tomatoes, diced" stays one. */
 function splitIngredientLine(line: string): string[] {
-  if (line.includes(',') && line.split(',').every((part) => part.trim().split(' ').length <= 6)) {
-    return line.split(',').map((p) => p.trim().replace(/[.;]+$/, '')).filter(Boolean);
+  const clean = line.replace(/[.;]+$/, '');
+  if (!clean.includes(',') || !clean.split(',').every((part) => part.trim().split(' ').length <= 6)) return [clean];
+  const out: string[] = [];
+  for (const raw of clean.split(',')) {
+    const part = raw.trim();
+    if (!part) continue;
+    // A prep note belongs to the ingredient before it.
+    if (out.length && PREP_NOTE.test(part)) out[out.length - 1] += `, ${part}`;
+    else out.push(part);
   }
-  return [line.replace(/[.;]+$/, '')];
+  return out;
 }
 
 function shortenTitle(title: string): string {

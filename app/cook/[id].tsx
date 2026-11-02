@@ -15,7 +15,7 @@ import { BackIcon } from '../../components/paper/UiIcons';
 import { getRecipe, recordCook } from '../../lib/db';
 import { awardXp, getProfile, XP_PER_STEP, XP_RECIPE_BONUS } from '../../lib/profile';
 import { listStepIngredients } from '../../lib/stepIngredients';
-import { getPaperSceneKind, stepTimer as stepTimerFor } from '../../lib/stepSceneLayout';
+import { sceneKindsFor, splitMixedSteps, stepTimer as stepTimerFor } from '../../lib/stepSceneLayout';
 import { cutCorners, fonts, paper } from '../../lib/theme';
 import { startAlarm, stopAlarm } from '../../lib/timerAlarm';
 import { DEFAULT_SERVINGS, scaleIngredient } from '../../lib/scaleIngredients';
@@ -78,7 +78,8 @@ export default function CookScreen() {
         setLoading(true);
         const result = await getRecipe(id);
         if (active) {
-          setRecipe(result);
+          // One step per place: "Simmer… Blend until smooth." becomes a pot step and a blender step.
+          setRecipe(result ? { ...result, steps: splitMixedSteps(result.steps) } : null);
           setStepIndex(0);
           setFinale(null);
           setTimers({});
@@ -113,10 +114,15 @@ export default function CookScreen() {
   const step = steps[stepIndex];
   const isLast = stepIndex === steps.length - 1;
   const ingredients = listStepIngredients(step, recipe.ingredients);
+  // "Simmer for 10 minutes" names nothing, but the scene should still show what's cooking.
+  let sceneIngredients = ingredients;
+  for (let i = stepIndex - 1; sceneIngredients.length === 0 && i >= 0; i--) {
+    sceneIngredients = listStepIngredients(steps[i], recipe.ingredients);
+  }
   const baseServings = recipe.servings ?? DEFAULT_SERVINGS;
   const people = Number(serves) > 0 ? Number(serves) : baseServings;
   const factor = people / baseServings;
-  const sceneKind = getPaperSceneKind(step);
+  const sceneKind = sceneKindsFor(steps)[stepIndex];
   const timerInfo = stepTimerFor(step.text);
   const timerMinutes = timerInfo?.minutes ?? null;
   const fresh = (minutes: number): TimerState => ({
@@ -237,7 +243,7 @@ export default function CookScreen() {
         }}
       >
         <Animated.View key={`scene-${stepIndex}`} entering={FadeIn.duration(350)}>
-          <InteractiveScene kind={sceneKind} ingredients={ingredients} size={sceneSize} onComplete={() => setGameDone(true)} />
+          <InteractiveScene kind={sceneKind} ingredients={sceneIngredients} size={sceneSize} onComplete={() => setGameDone(true)} />
         </Animated.View>
         {pop > 0 ? <XpPop key={`pop-${pop}`} amount={lastXp.current} /> : null}
         {pop > 0 ? <ConfettiBurst key={`burst-${pop}`} count={14} /> : null}

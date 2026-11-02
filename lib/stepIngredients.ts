@@ -78,14 +78,38 @@ function withoutEquipment(labels: string[], extraExclude: string[] = []): string
   });
 }
 
-function matchIngredientInStep(text: string, ingredient: string): boolean {
-  const key = ingredient.toLowerCase();
-  if (text.includes(key)) {
-    return true;
-  }
+const PREP_ONLY =
+  /^(diced|chopped|minced|sliced|grated|peeled|crushed|drained|rinsed|halved|quartered|softened|melted|beaten|to taste|optional|finely chopped|roughly chopped|thinly sliced|for serving|to serve|divided)$/i;
 
-  const short = key.split(/[\s_-]+/).pop();
-  return Boolean(short && short.length > 2 && text.includes(short));
+const AMOUNT_WORDS =
+  /^(\d+([./]\d+)?|[½¼¾⅓⅔⅛]|x|cups?|tbsps?|tablespoons?|tsps?|teaspoons?|g|kg|ml|l|oz|lbs?|pinch|handful|cloves?|cans?|tins?|packs?|packets?|bunch|large|medium|small|of|a|an|fresh|whole|big)$/i;
+
+/** Words that name the food in an ingredient line: "250g pack tomatoey cooked lentils" → ["tomatoey", "cooked", "lentils"]. */
+function foodWords(ingredient: string): string[] {
+  const head = ingredient.toLowerCase().replace(/\(.*?\)/g, ' ').split(/[,;]/)[0];
+  return head
+    .replace(/[^a-z\s-]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !AMOUNT_WORDS.test(w));
+}
+
+function stem(word: string): string {
+  if (word.endsWith('ies')) return word.slice(0, -3) + 'y';
+  if (word.endsWith('oes')) return word.slice(0, -2);
+  if (word.endsWith('es') && /(ch|sh|ss|x)es$/.test(word)) return word.slice(0, -2);
+  if (word.endsWith('s') && !word.endsWith('ss')) return word.slice(0, -1);
+  return word;
+}
+
+/** Whole-word, plural-insensitive match on the ingredient's main word ("aubergines" ↔ "aubergine", never "oil" in "boil"). */
+function matchIngredientInStep(text: string, ingredient: string): boolean {
+  if (PREP_ONLY.test(ingredient.trim())) return false;
+  const words = foodWords(ingredient);
+  if (words.length === 0) return false;
+  const main = stem(words[words.length - 1]);
+  const body = main.endsWith('y') ? `${main.slice(0, -1)}(?:y|ies)` : `${main}(?:s|es)?`;
+  const re = new RegExp(`\\b${body}\\b`, 'i');
+  return re.test(text);
 }
 
 function splitIngredientField(raw: string): string[] {
@@ -108,6 +132,10 @@ export function listStepIngredients(step: Step, recipeIngredients: string[]): st
   }
 
   const text = step.text.toLowerCase();
+  // Steps that use "everything" or "all the ingredients" really do mean all of them.
+  if (/\b(all (of )?the ingredients|everything)\b/.test(text)) {
+    return withoutEquipment(recipeIngredients.filter((i) => !PREP_ONLY.test(i.trim())), excludeTool);
+  }
   const matched = recipeIngredients.filter(
     (ingredient) => !isEquipmentLabel(ingredient) && matchIngredientInStep(text, ingredient),
   );
@@ -115,8 +143,8 @@ export function listStepIngredients(step: Step, recipeIngredients: string[]): st
     return withoutEquipment(matched, excludeTool);
   }
 
-  const fromRecipe = withoutEquipment(recipeIngredients, excludeTool);
-  return fromRecipe;
+  // Nothing named ("Simmer for 10 minutes"): show no list rather than every ingredient in the recipe.
+  return [];
 }
 
 /** Ingredient label for chips / UI copy — falls back to first food ingredient. */

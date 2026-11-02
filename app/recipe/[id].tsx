@@ -20,7 +20,7 @@ import { matchRecipe } from '../../lib/pantryMatch';
 import { XP_PER_STEP, XP_RECIPE_BONUS } from '../../lib/profile';
 import { DEFAULT_SERVINGS, scaleIngredient } from '../../lib/scaleIngredients';
 import { shareCard } from '../../lib/shareCard';
-import { getPaperSceneKind, stepTimer } from '../../lib/stepSceneLayout';
+import { sceneKindsFor, splitMixedSteps, stepTimer } from '../../lib/stepSceneLayout';
 import { cutCorners, estimateRecipeMinutes, fonts, formatSource, paper } from '../../lib/theme';
 import type { FridgeItem } from '../../types/fridge';
 import type { Recipe } from '../../types/recipe';
@@ -95,14 +95,17 @@ export default function RecipeOverviewScreen() {
   const color = dishColor(kind);
   const lightBg = color === paper.yellow || color === paper.blue || color === paper.orange;
   const fg = lightBg ? paper.ink : paper.card;
-  const totalXp = recipe.steps.length * XP_PER_STEP + XP_RECIPE_BONUS;
+  // Same step list cook mode uses, so counts and labels match.
+  const steps = splitMixedSteps(recipe.steps);
+  const scenes = sceneKindsFor(steps);
+  const totalXp = steps.length * XP_PER_STEP + XP_RECIPE_BONUS;
   const baseServings = recipe.servings ?? DEFAULT_SERVINGS;
   const serves = people ?? baseServings;
   const factor = serves / baseServings;
   const cooks = recipe.timesCooked ?? 0;
   const unlocked = cooks >= CARD_UNLOCK_COOKS;
   const nutrition = recipe.nutrition ?? estimateNutrition(recipe.ingredients, baseServings);
-  const minutes = estimateRecipeMinutes(recipe.steps.length);
+  const minutes = estimateRecipeMinutes(steps.length);
   // The card has to be on screen to be captured as an image, so open it first if it's folded away.
   const share = () => {
     if (!cardOpen) {
@@ -167,7 +170,7 @@ export default function RecipeOverviewScreen() {
                 {recipe.title}
               </Text>
               <Text style={[styles.heroMeta, { color: fg }]}>
-                {minutes} min · {recipe.steps.length} steps · {nutrition.calories} kcal
+                {minutes} min · {steps.length} steps · {nutrition.calories} kcal
               </Text>
               <View style={styles.statRow}>
                 <View style={[styles.stat, cutCorners.b]}>
@@ -240,11 +243,11 @@ export default function RecipeOverviewScreen() {
         <View>
           <Text style={[styles.section, styles.sectionGap]}>Steps</Text>
           <PaperCard shape="a" lift={3} contentStyle={styles.steps}>
-            {recipe.steps.map((step, i) => {
-              const scene = SCENE_LABEL[getPaperSceneKind(step)];
+            {steps.map((step, i) => {
+              const scene = SCENE_LABEL[scenes[i]];
               const timer = stepTimer(step.text);
               return (
-                <View key={`${i}-${step.text}`} style={[styles.step, i < recipe.steps.length - 1 && styles.stepDivider]}>
+                <View key={`${i}-${step.text}`} style={[styles.step, i < steps.length - 1 && styles.stepDivider]}>
                   <View style={[styles.stepNum, cutCorners.c]}>
                     <Text style={styles.stepNumText}>{i + 1}</Text>
                   </View>
@@ -297,7 +300,7 @@ export default function RecipeOverviewScreen() {
                   cooks={cooks}
                   servings={baseServings}
                   minutes={minutes}
-                  steps={recipe.steps.length}
+                  steps={steps.length}
                   number={cardNumber}
                   width={300}
                 />
