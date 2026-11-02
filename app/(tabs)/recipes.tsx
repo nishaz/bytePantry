@@ -16,16 +16,31 @@ import { useKitchen } from '../../lib/useKitchen';
 
 const TYPE_FOR_KIND: Record<DishKind, string> = {
   omelette: 'Breakfast',
+  pancakes: 'Breakfast',
+  oats: 'Breakfast',
   pasta: 'Pasta',
+  ramen: 'Asian',
+  stirfry: 'Asian',
+  sushi: 'Asian',
+  dumplings: 'Asian',
+  curry: 'Curry',
   soup: 'Soup',
   salad: 'Salad',
   rice: 'Rice',
-  pie: 'Baking',
+  steak: 'Mains',
+  roast: 'Mains',
+  pizza: 'Mains',
   sandwich: 'Sandwiches',
+  burger: 'Sandwiches',
+  taco: 'Sandwiches',
+  pie: 'Baking',
+  cake: 'Baking',
+  cookies: 'Baking',
+  loaf: 'Baking',
   smoothie: 'Drinks',
   bowl: 'Other',
 };
-const TYPE_ORDER = ['All', 'Breakfast', 'Pasta', 'Soup', 'Salad', 'Rice', 'Baking', 'Sandwiches', 'Drinks', 'Other'];
+const TYPE_ORDER = ['All', 'Breakfast', 'Pasta', 'Asian', 'Curry', 'Soup', 'Salad', 'Rice', 'Mains', 'Sandwiches', 'Baking', 'Drinks', 'Other'];
 
 export default function RecipesScreen() {
   const router = useRouter();

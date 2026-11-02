@@ -2,12 +2,12 @@ import { useEffect } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
+  FadeIn,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
   withSpring,
   withTiming,
-  ZoomIn,
 } from 'react-native-reanimated';
 
 import { shelfFor } from '../../lib/fridgeDb';
@@ -80,9 +80,9 @@ export function StorageView({ location, items, onSelect, onClose }: StorageViewP
               <Text style={[styles.shelfLabel, !isFridge && styles.textLight]}>{group.label}</Text>
               <View style={styles.items}>
                 {group.items.map((item) => {
-                  const delay = 260 + tileIndex++ * 55;
+                  const delay = 220 + Math.min(tileIndex++, 12) * 30;
                   return (
-                    <Animated.View key={item.id} entering={ZoomIn.delay(delay).springify().damping(11)}>
+                    <Animated.View key={item.id} entering={FadeIn.delay(delay).duration(200)}>
                       <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={`${item.name}, ${item.amount}`}
@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   tilePressed: {
-    transform: [{ scale: 0.92 }, { rotate: '-4deg' }],
+    transform: [{ scale: 0.96 }],
   },
   wood: {
     backgroundColor: '#D9A673',

@@ -1,13 +1,13 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn, FadeInRight, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Celebration, ConfettiBurst, XpPop } from '../../components/cook/paper/Celebration';
 import { GAME_BONUS_XP, InteractiveScene } from '../../components/cook/paper/InteractiveScene';
 import { KitchenTimer, TimerPill, type TimerState } from '../../components/cook/paper/KitchenTimer';
-import { IngredientArt } from '../../components/paper/IngredientArt';
+import { StepIngredients } from '../../components/cook/paper/StepIngredients';
 import { PaperBackground } from '../../components/paper/PaperBackground';
 import { PaperButton } from '../../components/paper/PaperButton';
 import { PaperCard } from '../../components/paper/PaperCard';
@@ -37,6 +37,7 @@ export default function CookScreen() {
   const earnedRef = useRef(0);
   const lastXp = useRef(XP_PER_STEP);
   const [timers, setTimers] = useState<Record<number, TimerState>>({});
+  const [sceneBox, setSceneBox] = useState<{ w: number; h: number } | null>(null);
   const anyRunning = Object.values(timers).some((t) => t.running);
   const anyRinging = Object.values(timers).some((t) => t.ringing);
 
@@ -127,7 +128,8 @@ export default function CookScreen() {
     endAt: null,
   });
   const stepTimer = timerMinutes !== null ? (timers[stepIndex] ?? fresh(timerMinutes)) : null;
-  const sceneSize = Math.min(width - 24, height * (stepTimer ? 0.32 : 0.38), 400);
+  // Fit the scene inside whatever space is left, leaving room for the mini-game meter under it.
+  const sceneSize = sceneBox ? Math.max(120, Math.min(sceneBox.w - 24, sceneBox.h - 70, 400)) : Math.min(width - 24, height * 0.3);
   const otherTimers = Object.values(timers).filter((t) => t.step !== stepIndex && (t.running || t.ringing));
 
   function updateTimer(change: (t: TimerState) => TimerState) {
@@ -206,20 +208,15 @@ export default function CookScreen() {
         </View>
       </View>
 
-      {ingredients.length > 0 ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.ingRow} style={styles.ingScroll}>
-          {ingredients.slice(0, 5).map((name, i) => (
-            <Animated.View key={`${stepIndex}-${name}`} entering={ZoomIn.delay(i * 70).springify().damping(12)}>
-              <PaperCard shape={i % 2 ? 'b' : 'c'} tilt={i % 2 ? 2 : -2} lift={2} contentStyle={styles.ingChip}>
-                <IngredientArt name={name} size={28} shadow={false} />
-                <Text style={styles.ingText}>{scaleIngredient(name, factor)}</Text>
-              </PaperCard>
-            </Animated.View>
-          ))}
-        </ScrollView>
-      ) : null}
+      <StepIngredients key={`ings-${stepIndex}`} stepKey={stepIndex} items={ingredients.map((name) => scaleIngredient(name, factor))} />
 
-      <View style={styles.sceneArea}>
+      <View
+        style={styles.sceneArea}
+        onLayout={(e) => {
+          const { width: w, height: h } = e.nativeEvent.layout;
+          setSceneBox({ w, h });
+        }}
+      >
         <Animated.View key={`scene-${stepIndex}`} entering={FadeIn.duration(350)}>
           <InteractiveScene kind={sceneKind} ingredients={ingredients} size={sceneSize} onComplete={() => setGameDone(true)} />
         </Animated.View>
@@ -376,6 +373,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
     justifyContent: 'center',
+    marginTop: 4,
+    overflow: 'hidden',
   },
   seg: {
     flex: 1,

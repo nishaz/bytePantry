@@ -112,22 +112,25 @@ export interface StepTimerInfo {
  * Checked in order; the first match wins. Anything not listed gets no timer.
  */
 const TYPICAL_TIMES: { match: RegExp; minutes: number; note: string }[] = [
-  { match: /\b(steak|ribeye|sirloin|fillet|filet|lamb chop|pork chop)s?\b.*\b(sear|cook|fry|grill|pan)|\b(sear|grill|fry|cook)\b.*\b(steak|ribeye|sirloin|fillet|filet)/, minutes: 3, note: 'Per side, medium-rare' },
-  { match: /\b(salmon|fish|cod|tuna)\b.*\b(sear|fry|pan|cook)|\b(sear|pan[- ]fry)\b.*\b(salmon|fish|cod)/, minutes: 4, note: 'Skin side down' },
-  { match: /\b(chicken breast|chicken thigh)s?\b.*\b(sear|fry|cook|pan)|\b(sear|pan[- ]fry)\b.*\bchicken\b/, minutes: 6, note: 'Per side, until cooked through' },
-  { match: /\bsoft[- ]boil/, minutes: 6, note: 'Soft-boiled eggs' },
-  { match: /\b(hard[- ]boil|boil (the )?eggs?)\b/, minutes: 10, note: 'Hard-boiled eggs' },
-  { match: /\b(boil|cook)\b.*\b(pasta|spaghetti|penne|noodles|linguine|fettuccine|macaroni)\b|\b(pasta|spaghetti|penne|noodles)\b.*\b(boil|al dente)\b/, minutes: 10, note: 'Until al dente' },
-  { match: /\b(cook|simmer|boil)\b.*\brice\b|\brice\b.*\b(cook|simmer)\b/, minutes: 18, note: 'Lid on, low heat' },
-  { match: /\bcaramel[iy]ze\b.*\bonions?\b/, minutes: 20, note: 'Low and slow' },
-  { match: /\bpancakes?\b|\bcr[eê]pes?\b/, minutes: 2, note: 'Per side' },
-  { match: /\bfry\b.*\beggs?\b|\beggs?\b.*\bfry\b/, minutes: 3, note: 'Until the white sets' },
-  { match: /\btoast\b/, minutes: 3, note: 'Until golden' },
-  { match: /\b(cookies?)\b.*\bbake\b|\bbake\b.*\bcookies?\b/, minutes: 12, note: 'Until edges are golden' },
-  { match: /\b(muffins?|cupcakes?)\b/, minutes: 20, note: 'Until a skewer comes out clean' },
-  { match: /\b(banana bread|loaf)\b/, minutes: 55, note: 'Until a skewer comes out clean' },
-  { match: /\bbake\b.*\bcake\b|\bcake\b.*\bbake\b/, minutes: 30, note: 'Until a skewer comes out clean' },
-  { match: /\broast\b.*\b(potato|potatoes|veg|vegetables)\b/, minutes: 35, note: 'Turn halfway' },
+  // Each rule needs the cooking action itself ("sear", "boil", "bake"…), so "in a loaf pan, mix…" never gets a timer.
+  { match: /\b(sear|grill|pan[- ]?fry|fry|cook)\b.*\b(steaks?|ribeye|sirloin|fillets?|filet|lamb chops?|pork chops?)\b|\b(steaks?|ribeye|sirloin)\b.*\b(sear|grill|pan[- ]?fry)\b/, minutes: 3, note: 'Per side, medium-rare' },
+  { match: /\b(sear|pan[- ]?fry|fry)\b.*\b(salmon|fish|cod|tuna|sea bass)\b/, minutes: 4, note: 'Skin side down' },
+  { match: /\b(sear|pan[- ]?fry|fry|grill)\b.*\bchicken\b/, minutes: 6, note: 'Per side, until cooked through' },
+  { match: /\bsoft[- ]?boil/, minutes: 6, note: 'Soft-boiled eggs' },
+  { match: /\b(hard[- ]?boil|boil (the )?eggs?)\b/, minutes: 10, note: 'Hard-boiled eggs' },
+  { match: /\b(boil|cook)\b.*\b(pasta|spaghetti|penne|noodles|linguine|fettuccine|macaroni)\b/, minutes: 10, note: 'Until al dente' },
+  { match: /\b(cook|simmer|boil)\b.*\brice\b/, minutes: 18, note: 'Lid on, low heat' },
+  { match: /\bboil\b.*\b(potato|potatoes|pumpkin|squash|sweet potato)\b/, minutes: 15, note: 'Until a fork slides in' },
+  { match: /\bcarameli[sz]e\b.*\bonions?\b/, minutes: 20, note: 'Low and slow' },
+  { match: /\b(cook|fry|flip)\b.*\b(pancakes?|cr[eê]pes?)\b/, minutes: 2, note: 'Per side' },
+  { match: /\bfry\b.*\beggs?\b/, minutes: 3, note: 'Until the white sets' },
+  { match: /\btoast (the )?(bread|slices?|buns?)\b/, minutes: 3, note: 'Until golden' },
+  { match: /\bbake\b.*\bcookies?\b/, minutes: 12, note: 'Until edges are golden' },
+  { match: /\bbake\b.*\b(muffins?|cupcakes?)\b/, minutes: 20, note: 'Until a skewer comes out clean' },
+  { match: /\bbake\b.*\b(banana bread|loaf|bread)\b/, minutes: 55, note: 'Until a skewer comes out clean' },
+  { match: /\bbake\b.*\b(cake|brownies?)\b/, minutes: 30, note: 'Until a skewer comes out clean' },
+  { match: /\bbake\b.*\boats\b/, minutes: 30, note: 'Until set in the middle' },
+  { match: /\broast\b.*\b(potato|potatoes|veg|vegetables|pumpkin|squash)\b/, minutes: 35, note: 'Turn halfway' },
 ];
 
 /** The timer a step needs: the time the recipe states, a typical time for things like steak, or none. */

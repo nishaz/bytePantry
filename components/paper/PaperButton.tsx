@@ -58,7 +58,7 @@ export function PaperButton({
         press.value = withSpring(1, { damping: 18, stiffness: 500 });
       }}
       onPressOut={() => {
-        press.value = withSpring(0, { damping: 9, stiffness: 320 });
+        press.value = withSpring(0, { damping: 16, stiffness: 320 });
       }}
       style={[styles.wrap, disabled && styles.disabled, style]}
     >

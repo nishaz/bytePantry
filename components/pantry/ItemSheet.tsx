@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
-import Animated, { SlideInDown, SlideOutDown } from 'react-native-reanimated';
+import Animated, { Easing, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 
 import { fonts, paper } from '../../lib/theme';
 import type { FridgeItem } from '../../types/fridge';
@@ -32,8 +32,8 @@ interface ItemSheetProps {
 export function ItemSheet({ item, bottom, onClose, onUsedUp, onEdit }: ItemSheetProps) {
   return (
     <Animated.View
-      entering={SlideInDown.springify().damping(15)}
-      exiting={SlideOutDown.duration(180)}
+      entering={SlideInDown.duration(220).easing(Easing.out(Easing.cubic))}
+      exiting={SlideOutDown.duration(160)}
       style={[styles.wrap, { bottom }]}
     >
       <PaperCard shape="d" lift={6} contentStyle={styles.card}>

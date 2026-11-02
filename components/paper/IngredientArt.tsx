@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import Svg, { Circle, Ellipse, G, Path, Rect, Text as SvgText } from 'react-native-svg';
 
 import { paper } from '../../lib/theme';
+import { MORE_ALIASES, MORE_ART } from './IngredientArtMore';
 
 /**
  * Paper cut-out ingredient library.
@@ -12,7 +13,7 @@ import { paper } from '../../lib/theme';
 type P = typeof paper;
 type Draw = (p: P) => ReactNode;
 
-const ART: Record<string, Draw> = {
+const BASE_ART: Record<string, Draw> = {
   tomato: (p) => (
     <>
       <Circle cx="24" cy="27" r="16" fill={p.red} />
@@ -293,7 +294,7 @@ const ART: Record<string, Draw> = {
   ),
 };
 
-const ALIASES: Record<string, string> = {
+const BASE_ALIASES: Record<string, string> = {
   tomatoes: 'tomato', 'cherry tomato': 'tomato', 'cherry tomatoes': 'tomato',
   sauce: 'tomato_sauce', 'tomato sauce': 'tomato_sauce', passata: 'tomato_sauce', marinara: 'tomato_sauce', ketchup: 'tomato_sauce', 'tomato paste': 'tomato_sauce',
   onions: 'onion', shallot: 'onion', shallots: 'onion', 'spring onion': 'herbs', scallion: 'herbs', leek: 'herbs',
@@ -322,6 +323,9 @@ const ALIASES: Record<string, string> = {
   stock: 'water', broth: 'water', 'chicken stock': 'water',
   'greek yogurt': 'yogurt', yoghurt: 'yogurt', 'sour cream': 'yogurt',
 };
+
+const ART: Record<string, Draw> = { ...BASE_ART, ...MORE_ART };
+const ALIASES: Record<string, string> = { ...BASE_ALIASES, ...MORE_ALIASES };
 
 export type IngredientKey = keyof typeof ART;
 
@@ -354,6 +358,19 @@ export function hasIngredientArt(raw: string): boolean {
   return resolveIngredientKey(raw) !== null;
 }
 
+const UNIT_WORDS =
+  /^(cups?|c|tbsps?|tablespoons?|tsps?|teaspoons?|g|grams?|kg|ml|l|litres?|liters?|oz|ounces?|lbs?|pounds?|pinch(es)?|dash(es)?|cloves?|cans?|tins?|handfuls?|slices?|pieces?|sticks?|bunch(es)?|large|small|medium|of|a|an|whole|fresh|chopped|diced|sliced|minced)$/i;
+
+/** First letter of the actual ingredient ("3 tbsp maple syrup" → "M"), skipping amounts and units. */
+export function fallbackLetter(name: string): string {
+  const words = name
+    .replace(/[\d½¼¾⅓⅔⅛\/.,()\-–]+/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+  const word = words.find((w) => !UNIT_WORDS.test(w)) ?? words[0] ?? '?';
+  return (word[0] ?? '?').toUpperCase();
+}
+
 function FallbackJar({ p, letter }: { p: P; letter: string }) {
   return (
     <>
@@ -377,7 +394,7 @@ interface IngredientArtProps {
 export function IngredientArt({ name, size = 48, shadow = true }: IngredientArtProps) {
   const key = resolveIngredientKey(name);
   const draw = key ? ART[key] : null;
-  const body = draw ? draw(paper) : <FallbackJar p={paper} letter={(name.trim()[0] ?? '?').toUpperCase()} />;
+  const body = draw ? draw(paper) : <FallbackJar p={paper} letter={fallbackLetter(name)} />;
   const silhouette = draw ? draw(SHADOW_PALETTE) : <FallbackJar p={SHADOW_PALETTE} letter="" />;
 
   return (

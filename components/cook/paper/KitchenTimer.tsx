@@ -108,7 +108,9 @@ export function KitchenTimer({ timer, note, onToggle, onAdjust, onReset, onStopR
         <Dial ratio={ratio} size={58} />
       </Animated.View>
       <View style={styles.flex}>
-        <Text style={styles.clock}>{formatClock(timer.left)}</Text>
+        <Text style={styles.clock} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+          {formatClock(timer.left)}
+        </Text>
         <Text style={styles.sub} numberOfLines={2}>
           {timer.running ? 'Cooking…' : idle ? note || 'Timer ready' : 'Paused'}
         </Text>
