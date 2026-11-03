@@ -74,6 +74,7 @@ export default function AddScreen() {
       );
     } catch (e) {
       setImportError(e instanceof ImportError ? e.message : 'Something went wrong reading that link.');
+      if (e instanceof ImportError && e.caption) setPasteText(e.caption);
     } finally {
       setImporting(false);
     }

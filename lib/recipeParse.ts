@@ -73,7 +73,7 @@ const NUTRITION_LINE =
 
 /** Lines in a caption that are about the post, not the cooking. */
 const NOISE =
-  /(\bfollow\b|\blike (and|&|\+) (save|share)|\bsave (this|it|for later)\b|\bshare (this|with)\b|\bcomment\b|link in (my )?bio|\bsubscribe\b|\btag (a|your)\b|\bdm (me|for)\b|\bfull recipe\b|\brecipe (below|in the comments)\b|\bturn on (post )?notifications\b|\bmore recipes\b|\bcode\b.*\boff\b|\bad\b|\bsponsored\b|\bhttps?:\/\/|\bwww\.)/i;
+  /(\bfollow (me|us|@|for|along)\b|^follow\b|\blike (and|&|\+) (save|share)|\bsave (this|it|for later)\b|\bshare (this|with)\b|^comment\b|\bcomment\b.*\b(below|recipe|and i|i'?ll|dm|send|for more)\b|\bfor more (recipes|ideas|like this)\b|link in (my )?bio|\bsubscribe\b|\btag (a|your)\b|\bdm (me|for)\b|\bfull recipe\b|\brecipe (below|in the comments)\b|\bturn on (post )?notifications\b|\bmore recipes\b|\bcode\b.*\boff\b|\bad\b|\bsponsored\b|\bhttps?:\/\/|\bwww\.)/i;
 const META_LINE =
   /^(prep|cook|total|bake|chill)(ing)?\s*(time)?\s*[:\-–]|^(serves|servings?|makes|yield|portions?)\b|^(per serving|nutrition|macros?)\b|^(time|ready in)\s*[:\-–]/i;
 
@@ -84,8 +84,12 @@ export function isCaptionNoise(line: string): boolean {
   if (/^@[\w.]+/.test(l)) return true;
   if (NOISE.test(l)) return true;
   if (META_LINE.test(l)) return true;
-  // A short line that is mostly numbers about nutrition.
-  if (NUTRITION_LINE.test(l) && !COOKING_VERB_LOOSE.test(l)) return true;
+  // A line of macros. One "200g fat-free yogurt" or "30g protein powder" is an ingredient, not a macro line,
+  // so it needs a calorie figure, a macros/nutrition label, or two different macros.
+  if (NUTRITION_LINE.test(l) && !COOKING_VERB_LOOSE.test(l)) {
+    const macroHits = (l.match(/\b(protein|carbs?|carbohydrates?|fats?|fib(?:er|re))\b/gi) ?? []).length;
+    if (/\d\s*(k?cals?|kcal|calories)\b|\b(calories|kcal)\b\s*[:\-–]?\s*\d|^(macros?|nutrition)\b/i.test(l) || macroHits >= 2) return true;
+  }
   // Only emoji / punctuation left.
   return !/[\p{L}\p{N}]/u.test(l);
 }
@@ -229,13 +233,13 @@ export function metaContent(html: string, key: string): string | null {
 
 /* ---------------- free text (captions, video descriptions) ---------------- */
 
-const INGREDIENT_HEADER = /^(ingredients?|you(?:'|’)ll need|what you need|shopping list)\b/i;
+const INGREDIENT_HEADER = /^(ingredients?|you(?:'|’)ll need|you need|what you need|shopping list)\b/i;
 const STEP_HEADER = /^(method|instructions?|directions?|steps?|how to( make)?( it)?|preparation|recipe)\b\s*:?\s*$/i;
 const UNIT =
   /\b(\d+\s*)?(cups?|cup|tbsp|tbs|tablespoons?|tsp|teaspoons?|g|grams?|kg|ml|l|litres?|liters?|oz|ounces?|lbs?|pounds?|pinch|dash|cloves?|cans?|tins?|slices?|handful|bunch|sticks?|pieces?|large|medium|small)\b/i;
 const QUANTITY = /^(\d+([./]\d+)?|[½¼¾⅓⅔⅛]|a |an |one |two |three |few |some |half )/i;
 const COOKING_VERB =
-  /\b(add|bake|boil|chop|cook|combine|cut|dice|drain|fold|fry|grate|heat|knead|marinate|melt|mix|place|pour|preheat|put|remove|roast|saut[eé]|season|serve|simmer|slice|spread|stir|toss|transfer|whisk|blend|bring|let|leave|top|garnish|sear|flip|cover|rest|wash|peel|mince)\b/i;
+  /\b(add|bake|boil|chop|cook|combine|cut|dice|drain|fold|fry|grate|heat|knead|marinate|melt|mix|place|pour|preheat|put|remove|roast|saut[eé]|season|serve|simmer|slice|spread|stir|toss|transfer|whisk|blend|bring|let|leave|top|garnish|sear|flip|cover|rest|wash|peel|mince|roll|shape|chill|freeze|refrigerate|microwave|layer|assemble)\b/i;
 
 /** Remove bullets, numbering, emoji decoration and hashtags from one line. */
 export function cleanLine(line: string): string {
@@ -263,7 +267,9 @@ function looksLikeIngredient(line: string): boolean {
 }
 
 function looksLikeStep(line: string): boolean {
-  return COOKING_VERB.test(line) && line.split(' ').length >= 3;
+  const words = line.split(' ');
+  // "Mix everything" is short but clearly a step when it starts with the verb.
+  return COOKING_VERB.test(line) && (words.length >= 3 || COOKING_VERB.test(words[0] ?? ''));
 }
 
 /**
@@ -271,28 +277,56 @@ function looksLikeStep(line: string): boolean {
  *   "Garlic butter pasta 🍝 Ingredients: 200g spaghetti, 3 cloves garlic … Method: 1. Boil … 2. Melt …"
  * Works with headed sections, numbered steps, bullet lists, or just a block of lines.
  */
+/**
+ * Captions written as one run-on line ("1 cup peanut butter 1/2 cup sugar 1 egg mix everything, bake at 180")
+ * get a line break before each amount and before each cooking verb that follows one.
+ */
+function densify(raw: string): string {
+  return raw
+    .replace(/\s+(?=(?:\d+(?:[./]\d+)?|[½¼¾⅓⅔])\s*(?:cups?|tbsp|tsp|tablespoons?|teaspoons?|g|kg|ml|oz|lbs?|cloves?|cans?)?\s+(?!ingredients?\b|min|mins|minutes|hours?|seconds|degrees|servings?|people|for\b|at\b|to\b|c\b|f\b)[a-z])/gi, '\n')
+    .replace(/\s+(?=(?:mix|add|bake|boil|fry|stir|whisk|blend|cook|roll|pour|top|serve|chop|melt|simmer|combine|heat|place|season|marinate|air fry)\b)/gi, '\n');
+}
+
+function score(p: ParsedRecipe): number {
+  return p.ingredients.length * 2 + p.steps.length;
+}
+
 export function parseFreeTextRecipe(raw: string, fallbackTitle = 'Imported recipe'): ParsedRecipe {
+  const first = parseCore(raw, fallbackTitle);
+  if (first.ingredients.length > 1 && first.steps.length > 1) return first;
+  // Nothing clean came out: try again treating every amount and verb as the start of a new line.
+  const dense = parseCore(densify(raw), fallbackTitle);
+  return score(dense) > score(first) ? { ...dense, title: first.title !== fallbackTitle ? first.title : dense.title } : first;
+}
+
+function parseCore(raw: string, fallbackTitle: string): ParsedRecipe {
   const text = decodeEntities(raw)
     .replace(/\r/g, '')
     // "(serves 4)" would otherwise look like a numbered step "4)".
     .replace(/\(\s*((?:serves|servings?|for|makes)\b[^)]*)\)/gi, ' $1 ')
     // Put inline section headers and numbered steps on their own lines.
-    .replace(/\s*\b(ingredients?|method|instructions|directions|steps|you(?:'|’)ll need|what you need)\s*:\s*/gi, '\n$1:\n')
+    .replace(/\s*\b(ingredients?|method|instructions|directions|steps|you(?:'|’)ll need|you need|what you need)\s*:\s*/gi, '\n$1:\n')
+    // "Full recipe: 200g pasta, …" — drop the label, keep what follows.
+    .replace(/\b(?:full )?recipe\s*(?:below)?\s*[:👇⬇️]+\s*/giu, '\n')
     .replace(/\s+(?=(?:step\s*)?\d{1,2}[.)]\s+\D)/gi, '\n');
 
   // Work sentence by sentence, so "Mix it all. Chill overnight. Link in bio!" keeps the steps and drops the plug.
   const lines = text
     .split('\n')
-    .flatMap((l) => l.split(/(?<=[.!?])\s+(?=[A-Z0-9])/))
+    // Sentence ends, but not after "tbsp." or "approx." style abbreviations.
+    .flatMap((l) => l.split(/(?<!\b(?:tbsp|tsp|oz|lbs?|approx|min|mins|g|ml|e\.g|i\.e))(?<=[.!?])\s+(?=[A-Za-z0-9])/i))
     .map((l) => l.trim())
     .filter(Boolean);
 
   let title = '';
   const ingredients: string[] = [];
   const steps: string[] = [];
+  // Macros are only read from lines that aren't ingredients, so "30g protein powder" isn't "30g protein".
+  const nutritionText: string[] = [];
   let mode: 'intro' | 'ingredients' | 'steps' = 'intro';
 
   for (const original of lines) {
+    if (isCaptionNoise(cleanLine(original)) || !looksLikeIngredient(cleanLine(original))) nutritionText.push(original);
     const header = original.replace(/[:：]\s*$/, '').trim();
     if (INGREDIENT_HEADER.test(header) && header.length < 30) {
       mode = 'ingredients';
@@ -302,7 +336,8 @@ export function parseFreeTextRecipe(raw: string, fallbackTitle = 'Imported recip
       mode = 'steps';
       continue;
     }
-    const line = cleanLine(original);
+    // "Top with berries 💙 comment YUM for more!" keeps the cooking part.
+    const line = dropTrailingPlug(cleanLine(original));
     if (!line) continue;
     if (isCaptionNoise(line)) {
       // "Chicken pasta | 520 cal" still names the dish: keep the part before the numbers.
@@ -355,13 +390,37 @@ export function parseFreeTextRecipe(raw: string, fallbackTitle = 'Imported recip
     }
   }
 
-  const tidySteps = steps.map((st) => st.replace(/[\s,(]*\b(serves|makes|for)\s+\d+\s*(people|servings?)?\)?\s*$/i, '').trim()).filter(Boolean);
+  const tidySteps = steps
+    .map(dropTrailingPlug)
+    .filter(Boolean)
+    .flatMap(splitActionList)
+    .map((st) => st.replace(/[,;:]+$/, '').replace(/^\p{Ll}/u, (c) => c.toUpperCase()))
+    .map((st) => st.replace(/[\s,(]*\b(serves|makes|for)\s+\d+\s*(people|servings?)?\)?\s*$/i, '').trim()).filter(Boolean);
   return {
     title: shortenTitle(title) || fallbackTitle,
     ingredients: dedupe(ingredients).slice(0, 40),
     steps: dedupe(tidySteps).slice(0, 30),
-    nutrition: parseStatedNutrition(text),
+    nutrition: parseStatedNutrition(nutritionText.join('\n')),
   };
+}
+
+/** "Top with berries 💙 comment YUM for more!" → "Top with berries". */
+function dropTrailingPlug(step: string): string {
+  const m = NOISE.exec(step);
+  if (!m || m.index < 8) return step;
+  return step.slice(0, m.index).replace(/[\s\p{Extended_Pictographic}\uFE0F,.!&+-]+$/u, '').trim();
+}
+
+/** "boil pasta, fry garlic in butter, add cream & parmesan, toss!" → four steps, when every part starts with a cooking verb. */
+function splitActionList(step: string): string[] {
+  const parts = step
+    .split(/\s*,\s*(?:then\s+|and\s+)?|\s+then\s+/i)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length < 2 || !parts.every((p) => COOKING_VERB.test(p.split(/\s+/)[0] ?? '') || COOKING_VERB.test(p.split(/\s+/).slice(0, 2).join(' ')))) {
+    return [step];
+  }
+  return parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1).replace(/[,;]+$/, ''));
 }
 
 /** "200g pasta, 2 eggs, salt" on one line becomes three ingredients. */
@@ -443,6 +502,20 @@ export function youtubeDescription(html: string): string | null {
 }
 
 /** Instagram's og:description reads `123 likes, 4 comments - user on date: "caption"`. */
+/** The full video description from a TikTok page's embedded JSON ("desc":"…"), longest one wins. */
+export function tiktokDescription(html: string): string | null {
+  let best: string | null = null;
+  for (const m of html.matchAll(/"desc"\s*:\s*"((?:[^"\\]|\\.){10,})"/g)) {
+    try {
+      const text = JSON.parse(`"${m[1]}"`) as string;
+      if (!best || text.length > best.length) best = text;
+    } catch {
+      // ignore malformed escapes
+    }
+  }
+  return best;
+}
+
 export function instagramCaption(html: string): string | null {
   const desc = (metaContent(html, 'og:description') ?? metaContent(html, 'description'))?.trim();
   if (!desc) return null;

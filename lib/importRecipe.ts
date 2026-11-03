@@ -7,6 +7,7 @@ import {
   normaliseUrl,
   parseFreeTextRecipe,
   parseJsonLdRecipe,
+  tiktokDescription,
   youtubeDescription,
   type LinkSource,
   type StatedNutrition,
@@ -26,7 +27,14 @@ export interface ImportedRecipe {
   complete: boolean;
 }
 
-export class ImportError extends Error {}
+export class ImportError extends Error {
+  /** The caption we did get, so the user can fix it up and fill the form from it. */
+  caption?: string;
+  constructor(message: string, caption?: string) {
+    super(message);
+    this.caption = caption;
+  }
+}
 
 // A normal phone browser user agent: some sites serve an empty page to unknown clients.
 const UA =
@@ -79,12 +87,49 @@ function finish(
 }
 
 async function fromTikTok(url: string): Promise<ImportedRecipe> {
-  // TikTok's public oEmbed endpoint returns the caption as `title`.
-  const res = await get(`https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`, 'application/json');
-  const data = (await res.json()) as { title?: string; author_name?: string };
-  const caption = data.title ?? '';
-  const parsed = parseFreeTextRecipe(caption, data.author_name ? `Recipe from @${data.author_name}` : 'TikTok recipe');
-  return finish(parsed, parseServings(caption), 'tiktok', url);
+  // Collect every version of the caption we can get, then keep whichever reads best:
+  // oEmbed's `title` is sometimes shortened or empty, and the video page carries the full description.
+  const captions: string[] = [];
+  let author = '';
+  let finalUrl = url;
+  try {
+    const res = await get(`https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`, 'application/json');
+    const data = (await res.json()) as { title?: string; author_name?: string };
+    if (data.title) captions.push(data.title);
+    author = data.author_name ?? '';
+  } catch {
+    // fall through to the page
+  }
+  try {
+    const page = await get(url);
+    finalUrl = page.url || url; // vm.tiktok.com short links redirect to the full video URL
+    const html = await page.text();
+    const desc = tiktokDescription(html);
+    if (desc) captions.push(desc);
+    const og = metaContent(html, 'og:description') ?? metaContent(html, 'description');
+    if (og) captions.push(og);
+  } catch {
+    // keep whatever oEmbed gave us
+  }
+  if (captions.length === 0) {
+    throw new ImportError("TikTok didn't share this video's caption. Paste the caption below instead.");
+  }
+  const fallback = author ? `Recipe from @${author}` : 'TikTok recipe';
+  const scored = captions.map((caption) => {
+    const parsed = parseFreeTextRecipe(caption, fallback);
+    return { caption, parsed, score: parsed.ingredients.length * 2 + parsed.steps.length };
+  });
+  scored.sort((a, b) => b.score - a.score || b.caption.length - a.caption.length);
+  const best = scored[0];
+  try {
+    return finish(best.parsed, parseServings(best.caption), 'tiktok', finalUrl.split('?')[0]);
+  } catch {
+    const longest = [...captions].sort((a, b) => b.length - a.length)[0];
+    throw new ImportError(
+      "Couldn't pick out the ingredients and steps. The caption is below: tidy it up if you like, then tap Fill in.",
+      longest,
+    );
+  }
 }
 
 async function fromYouTube(url: string): Promise<ImportedRecipe> {
@@ -105,7 +150,14 @@ async function fromInstagram(url: string): Promise<ImportedRecipe> {
     );
   }
   const parsed = parseFreeTextRecipe(caption, 'Instagram recipe');
-  return finish(parsed, parseServings(caption), 'instagram', url);
+  try {
+    return finish(parsed, parseServings(caption), 'instagram', url);
+  } catch {
+    throw new ImportError(
+      "Couldn't pick out the ingredients and steps. The caption is below: tidy it up if you like, then tap Fill in.",
+      caption,
+    );
+  }
 }
 
 async function fromWebsite(url: string): Promise<ImportedRecipe> {
