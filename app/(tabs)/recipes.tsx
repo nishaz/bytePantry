@@ -6,7 +6,7 @@ import Svg, { Circle, Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DishArt, dishColor, dishKindFor, type DishKind } from '../../components/paper/DishArt';
-import { ChipRow, FilterChip } from '../../components/paper/FilterChip';
+import { FilterChip } from '../../components/paper/FilterChip';
 import { dealIn } from '../../components/paper/Motion';
 import { PaperBackground } from '../../components/paper/PaperBackground';
 import { PaperCard } from '../../components/paper/PaperCard';
@@ -75,7 +75,7 @@ export default function RecipesScreen() {
 
   return (
     <PaperBackground>
-      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <View style={styles.titleRow}>
           <Text style={styles.title}>Recipe box</Text>
           <Text style={styles.count}>
@@ -83,7 +83,7 @@ export default function RecipesScreen() {
           </Text>
         </View>
         <View style={[styles.search, cutCorners.c]}>
-          <Svg width={18} height={18} viewBox="0 0 24 24">
+          <Svg width={16} height={16} viewBox="0 0 24 24">
             <Circle cx="11" cy="11" r="7" fill="none" stroke={paper.inkSoft} strokeWidth={2.6} />
             <Path d="M20 20l-4-4" stroke={paper.inkSoft} strokeWidth={2.6} strokeLinecap="round" />
           </Svg>
@@ -99,19 +99,20 @@ export default function RecipesScreen() {
         </View>
       </View>
 
-      <View>
-        <ChipRow options={types} value={type} onChange={setType} />
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.toggles}>
-          <FilterChip variant="toggle" label="Can cook now" active={cookNow} onPress={() => setCookNow((v) => !v)} />
-          <FilterChip variant="toggle" label="Under 20 min" active={quick} onPress={() => setQuick((v) => !v)} />
-          <FilterChip variant="toggle" label="Uses expiring" active={rescue} onPress={() => setRescue((v) => !v)} />
-        </ScrollView>
-      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters} style={styles.filterScroll}>
+        {types.map((t) => (
+          <FilterChip key={t} compact label={t} active={t === type} onPress={() => setType(t)} />
+        ))}
+        <View style={styles.filterDivider} />
+        <FilterChip compact variant="toggle" label="Can cook now" active={cookNow} onPress={() => setCookNow((v) => !v)} />
+        <FilterChip compact variant="toggle" label="Under 20 min" active={quick} onPress={() => setQuick((v) => !v)} />
+        <FilterChip compact variant="toggle" label="Uses expiring" active={rescue} onPress={() => setRescue((v) => !v)} />
+      </ScrollView>
 
       <FlatList
         data={shown}
         keyExtractor={(item) => item.recipe.id}
-        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 120 }]}
+        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 110 }]}
         ListEmptyComponent={
           <Text style={styles.empty}>{recipes.length ? 'No recipes match these filters.' : 'No recipes yet. Tap + to add one.'}</Text>
         }
@@ -127,25 +128,21 @@ export default function RecipesScreen() {
                 onPress={() => router.push(`/recipe/${recipe.id}`)}
                 style={({ pressed }) => pressed && styles.pressed}
               >
-                <PaperCard shape={index % 2 ? 'b' : 'a'} tilt={index % 2 ? 0.6 : -0.6} lift={4} contentStyle={styles.card}>
+                <PaperCard shape={index % 2 ? 'b' : 'a'} lift={3} contentStyle={styles.card}>
                   <View style={[styles.art, cutCorners.c, { backgroundColor: dishColor(kind) }]}>
-                    <DishArt title={recipe.title} size={70} />
+                    <DishArt title={recipe.title} size={48} />
                   </View>
                   <View style={styles.copy}>
-                    <View style={styles.badges}>
-                      {ready ? (
-                        <Text style={[styles.badge, { backgroundColor: paper.green }]}>Cook now</Text>
-                      ) : null}
-                      {match.usesExpiring ? (
-                        <Text style={[styles.badge, { backgroundColor: paper.red }]}>Uses expiring</Text>
-                      ) : null}
-                    </View>
-                    <Text style={styles.name} numberOfLines={2}>
+                    <Text style={styles.name} numberOfLines={1}>
                       {recipe.title}
                     </Text>
-                    <Text style={styles.meta}>
-                      {minutes} min · {formatSource(recipe.source)}
-                    </Text>
+                    <View style={styles.metaRow}>
+                      <Text style={styles.meta} numberOfLines={1}>
+                        {minutes} min · {formatSource(recipe.source)}
+                      </Text>
+                      {ready ? <Text style={[styles.badge, { backgroundColor: paper.green }]}>Cook now</Text> : null}
+                      {match.usesExpiring ? <Text style={[styles.badge, { backgroundColor: paper.red }]}>Uses expiring</Text> : null}
+                    </View>
                     <View style={styles.haveRow}>
                       <View style={styles.track}>
                         <View
@@ -173,28 +170,48 @@ export default function RecipesScreen() {
 const styles = StyleSheet.create({
   art: {
     alignItems: 'center',
-    height: 86,
+    height: 54,
     justifyContent: 'center',
-    width: 86,
+    width: 54,
   },
   badge: {
-    borderRadius: 7,
+    borderRadius: 5,
     color: paper.card,
     fontFamily: fonts.bodyBold,
-    fontSize: 11,
+    fontSize: 10,
     overflow: 'hidden',
-    paddingHorizontal: 7,
-    paddingVertical: 1,
-  },
-  badges: {
-    flexDirection: 'row',
-    gap: 6,
+    paddingHorizontal: 5,
   },
   card: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 12,
-    padding: 10,
+    gap: 10,
+    paddingLeft: 7,
+    paddingRight: 10,
+    paddingVertical: 7,
+  },
+  filterDivider: {
+    alignSelf: 'stretch',
+    backgroundColor: paper.kraftDeep,
+    marginHorizontal: 2,
+    marginVertical: 5,
+    width: 1,
+  },
+  filterScroll: {
+    flexGrow: 0,
+  },
+  filters: {
+    alignItems: 'center',
+    gap: 6,
+    paddingBottom: 6,
+    paddingHorizontal: 16,
+    paddingTop: 2,
+  },
+  metaRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 5,
+    marginTop: 2,
   },
   copy: {
     flex: 1,
@@ -203,7 +220,7 @@ const styles = StyleSheet.create({
   count: {
     color: paper.inkSoft,
     fontFamily: fonts.bodyBold,
-    fontSize: 13,
+    fontSize: 12.5,
   },
   empty: {
     color: paper.inkSoft,
@@ -219,35 +236,34 @@ const styles = StyleSheet.create({
   have: {
     color: paper.ink,
     fontFamily: fonts.bodyBold,
-    fontSize: 12,
+    fontSize: 11,
   },
   haveRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 6,
+    gap: 6,
+    marginTop: 5,
   },
   header: {
-    paddingBottom: 12,
-    paddingHorizontal: 20,
+    paddingBottom: 10,
+    paddingHorizontal: 16,
   },
   list: {
-    gap: 14,
-    paddingHorizontal: 20,
+    gap: 8,
+    paddingHorizontal: 16,
     paddingTop: 8,
   },
   meta: {
     color: paper.inkSoft,
-    fontFamily: fonts.body,
-    fontSize: 12.5,
-    marginTop: 2,
+    flexShrink: 1,
+    fontFamily: fonts.bodyBold,
+    fontSize: 11.5,
   },
   name: {
     color: paper.ink,
     fontFamily: fonts.display,
-    fontSize: 19,
-    lineHeight: 23,
-    marginTop: 3,
+    fontSize: 15.5,
+    lineHeight: 19,
   },
   pressed: {
     transform: [{ scale: 0.98 }],
@@ -257,22 +273,22 @@ const styles = StyleSheet.create({
     backgroundColor: paper.card,
     flexDirection: 'row',
     gap: 8,
-    marginTop: 12,
-    minHeight: 46,
+    marginTop: 10,
+    minHeight: 40,
     paddingHorizontal: 12,
   },
   searchInput: {
     color: paper.ink,
     flex: 1,
     fontFamily: fonts.body,
-    fontSize: 15,
-    minHeight: 44,
+    fontSize: 14,
+    minHeight: 40,
   },
   title: {
     color: paper.ink,
     fontFamily: fonts.display,
-    fontSize: 32,
-    lineHeight: 38,
+    fontSize: 26,
+    lineHeight: 30,
   },
   titleRow: {
     alignItems: 'baseline',
@@ -287,9 +303,9 @@ const styles = StyleSheet.create({
   },
   track: {
     backgroundColor: paper.kraft,
-    borderRadius: 5,
+    borderRadius: 3,
     flex: 1,
-    height: 8,
+    height: 5,
     overflow: 'hidden',
   },
 });

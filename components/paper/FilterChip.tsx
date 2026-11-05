@@ -7,21 +7,23 @@ interface FilterChipProps {
   active: boolean;
   onPress: () => void;
   variant?: 'solid' | 'toggle';
+  /** Smaller chip for dense filter rows. */
+  compact?: boolean;
 }
 
-export function FilterChip({ label, active, onPress, variant = 'solid' }: FilterChipProps) {
+export function FilterChip({ label, active, onPress, variant = 'solid', compact }: FilterChipProps) {
   if (variant === 'toggle') {
     return (
       <Pressable
         accessibilityRole="checkbox"
         accessibilityState={{ checked: active }}
         onPress={onPress}
-        style={[styles.toggle, active ? styles.toggleOn : styles.toggleOff]}
+        style={[styles.toggle, compact && styles.toggleCompact, active ? styles.toggleOn : styles.toggleOff]}
       >
         <View style={[styles.box, { borderColor: active ? paper.card : paper.ink }]}>
           {active ? <Text style={styles.tick}>✓</Text> : null}
         </View>
-        <Text style={[styles.toggleText, { color: active ? paper.card : paper.ink }]}>{label}</Text>
+        <Text style={[styles.toggleText, compact && styles.textCompact, { color: active ? paper.card : paper.ink }]}>{label}</Text>
       </Pressable>
     );
   }
@@ -33,8 +35,8 @@ export function FilterChip({ label, active, onPress, variant = 'solid' }: Filter
       style={styles.wrap}
     >
       <View style={[StyleSheet.absoluteFill, cutCorners.c, styles.shadow]} />
-      <View style={[styles.chip, cutCorners.c, { backgroundColor: active ? paper.ink : paper.card }]}>
-        <Text style={[styles.text, { color: active ? paper.card : paper.ink }]}>{label}</Text>
+      <View style={[styles.chip, compact && styles.chipCompact, cutCorners.c, { backgroundColor: active ? paper.ink : paper.card }]}>
+        <Text style={[styles.text, compact && styles.textCompact, { color: active ? paper.card : paper.ink }]}>{label}</Text>
       </View>
     </Pressable>
   );
@@ -72,6 +74,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 36,
     paddingHorizontal: 14,
+  },
+  chipCompact: {
+    minHeight: 32,
+    paddingHorizontal: 12,
+  },
+  textCompact: {
+    fontSize: 12.5,
+  },
+  toggleCompact: {
+    minHeight: 32,
+    paddingHorizontal: 10,
   },
   row: {
     gap: 9,
