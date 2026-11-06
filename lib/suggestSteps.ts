@@ -79,7 +79,7 @@ export function suggestSteps(title: string, ingredients: string[]): string[] {
   const finish = [...cheese, ...herbs];
 
   const isBake =
-    ['cookies', 'cake', 'loaf', 'pie'].includes(kind) || (kind === 'oats' && /bake|baked|bar|muffin/.test(t)) || /muffin|brownie|bake\b/.test(t);
+    ['cookies', 'cake', 'loaf', 'pie', 'muffin'].includes(kind) || (kind === 'oats' && /bake|baked|bar|muffin/.test(t)) || /muffin|brownie|bake\b/.test(t);
 
   if (isBake) {
     const minutes = /muffin/.test(t) ? 20 : BAKE_MINUTES[kind] ?? 30;
@@ -140,7 +140,17 @@ export function suggestSteps(title: string, ingredients: string[]): string[] {
     return steps;
   }
 
-  if (kind === 'pancakes') {
+  if (kind === 'pudding') {
+    const liquid = items.filter((i) => ['milk', 'yogurt', 'coconut', 'cream'].includes(i.key ?? ''));
+    const base = items.filter((i) => !liquid.includes(i) && (i.role === 'season' || i.role === 'dry' || i.key === 'sesame'));
+    const toppings = items.filter((i) => i.role === 'fruit' || i.role === 'mixin');
+    steps.push(`Stir the ${list(base) || 'chia seeds'} into the ${list(liquid) || 'milk'} in a jar or glass`);
+    steps.push('Cover and chill in the fridge for at least 2 hours, or overnight');
+    if (toppings.length) steps.push(`Top with the ${list(toppings)} and serve`);
+    return steps;
+  }
+
+  if (kind === 'pancakes' || kind === 'crepe') {
     steps.push(`Whisk the ${list(by('dry', 'season')) || 'flour'} with the ${list(items.filter((i) => i.role === 'wet' || i.role === 'egg')) || 'milk and eggs'} into a smooth batter`);
     steps.push('Heat a lightly buttered pan over medium heat');
     steps.push('Pour in a ladle of batter and fry for 2 minutes until bubbles form, then flip');

@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -11,7 +11,7 @@ import { PaperBackground } from '../../components/paper/PaperBackground';
 import { PaperButton } from '../../components/paper/PaperButton';
 import { PaperCard } from '../../components/paper/PaperCard';
 import { FlameIcon } from '../../components/paper/UiIcons';
-import { listPlan, rollingWeek, type MealSlot } from '../../lib/mealPlan';
+import { groupPlan, listPlan, rollingWeek, type MealSlot } from '../../lib/mealPlan';
 import { matchRecipe, pickCookNow } from '../../lib/pantryMatch';
 import { levelFor, XP_PER_STEP, XP_RECIPE_BONUS } from '../../lib/profile';
 import { cutCorners, estimateRecipeMinutes, fonts, paper } from '../../lib/theme';
@@ -65,13 +65,16 @@ export default function KitchenScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { recipes, fridge, profile } = useKitchen();
-  const [planned, setPlanned] = useState<Record<string, string>>({});
+  // Exact pixel widths so three tiles always fit in a row (percentages + gaps can round over and wrap to two).
+  const { width } = useWindowDimensions();
+  const tileWidth = Math.floor((Math.min(width, 600) - 32 - 16) / 3);
+  const [planned, setPlanned] = useState<Record<string, string[]>>({});
 
   useFocusEffect(
     useCallback(() => {
       const week = rollingWeek();
       listPlan(week[0].key, week[1].key)
-        .then((rows) => setPlanned(Object.fromEntries(rows.map((r) => [`${r.day}|${r.slot}`, r.recipeId]))))
+        .then((rows) => setPlanned(groupPlan(rows)))
         .catch(() => undefined);
     }, []),
   );
@@ -155,7 +158,9 @@ export default function KitchenScreen() {
         <View style={styles.planRow}>
           {nextSlots().map((s) => {
             const day = week[s.dayIndex];
-            const recipe: Recipe | undefined = byId.get(planned[`${day.key}|${s.slot}`] ?? '');
+            const ids = (planned[`${day.key}|${s.slot}`] ?? []).filter((id) => byId.has(id));
+            const recipe: Recipe | undefined = byId.get(ids[0] ?? '');
+            const extra = ids.length > 1 ? ` +${ids.length - 1}` : '';
             const tint = SLOT_TINT[s.slot];
             return (
               <Pressable
@@ -175,7 +180,7 @@ export default function KitchenScreen() {
                 <View style={styles.flex}>
                   <Text style={[styles.planLabel, { color: tint.text }]}>{s.label}</Text>
                   <Text style={[styles.planTitle, !recipe && styles.planTitleEmpty]} numberOfLines={1}>
-                    {recipe ? recipe.title : 'Plan a meal'}
+                    {recipe ? `${recipe.title}${extra}` : 'Plan a meal'}
                   </Text>
                 </View>
               </Pressable>
@@ -226,7 +231,7 @@ export default function KitchenScreen() {
               const light = color === paper.yellow || color === paper.blue || color === paper.orange;
               const fg = light ? paper.ink : paper.card;
               return (
-                <Animated.View key={recipe.id} entering={dealIn(index + 2)} style={styles.gridCell}>
+                <Animated.View key={recipe.id} entering={dealIn(index + 2)} style={{ width: tileWidth }}>
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`${recipe.title}, have ${match.have} of ${match.total}`}
@@ -292,9 +297,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-  },
-  gridCell: {
-    width: '31.8%',
   },
   header: {
     alignItems: 'flex-end',

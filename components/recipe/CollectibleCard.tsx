@@ -36,7 +36,8 @@ const TYPE_LABEL: Record<DishKind, string> = {
   omelette: 'Breakfast', pancakes: 'Breakfast', oats: 'Breakfast', pasta: 'Pasta', ramen: 'Noodle', stirfry: 'Wok',
   sushi: 'Sushi', dumplings: 'Dumpling', curry: 'Curry', soup: 'Soup', salad: 'Fresh', rice: 'Rice', steak: 'Grill',
   roast: 'Roast', pizza: 'Pizza', sandwich: 'Handheld', burger: 'Handheld', taco: 'Handheld', pie: 'Bake', cake: 'Bake',
-  cookies: 'Bake', loaf: 'Bake', smoothie: 'Drink', bowl: 'Bowl',
+  cookies: 'Bake', loaf: 'Bake', smoothie: 'Drink', bowl: 'Bowl', crepe: 'Breakfast', rolls: 'Bake',
+  pudding: 'Sweet', muffin: 'Bake', skewers: 'Grill', wrap: 'Handheld',
 };
 
 /** Macro "moves": playful names, but the numbers are the real per-serving estimate. */

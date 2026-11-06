@@ -61,31 +61,60 @@ export function weekRangeLabel(days: PlanDay[]): string {
 
 export async function initMealPlanTable(): Promise<void> {
   await runDb(async (db) => {
+    // One row per recipe in a slot, so lunch can hold a main and a side.
     await db.execAsync(`
-      CREATE TABLE IF NOT EXISTS meal_plan (
+      CREATE TABLE IF NOT EXISTS meal_plan_items (
         day TEXT NOT NULL,
         slot TEXT NOT NULL,
         recipeId TEXT NOT NULL,
-        PRIMARY KEY (day, slot)
+        position INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (day, slot, recipeId)
       );
     `);
+    // Bring over plans saved by the first version (one recipe per slot), once.
+    const old = await db.getFirstAsync<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'meal_plan'");
+    if (old) {
+      await db.execAsync(
+        'INSERT OR IGNORE INTO meal_plan_items (day, slot, recipeId, position) SELECT day, slot, recipeId, 0 FROM meal_plan; DROP TABLE meal_plan;',
+      );
+    }
     // Keep the table small: forget plans more than a month old.
-    await db.runAsync('DELETE FROM meal_plan WHERE day < ?', dayKey(new Date(Date.now() - 31 * 86400000)));
+    await db.runAsync('DELETE FROM meal_plan_items WHERE day < ?', dayKey(new Date(Date.now() - 31 * 86400000)));
   });
 }
 
+/** Every planned recipe between two days, in the order they were added to each slot. */
 export async function listPlan(fromDay: string, toDay: string): Promise<PlannedMeal[]> {
   return runDb((db) =>
-    db.getAllAsync<PlannedMeal>('SELECT day, slot, recipeId FROM meal_plan WHERE day >= ? AND day <= ?', fromDay, toDay),
+    db.getAllAsync<PlannedMeal>(
+      'SELECT day, slot, recipeId FROM meal_plan_items WHERE day >= ? AND day <= ? ORDER BY day, slot, position',
+      fromDay,
+      toDay,
+    ),
   );
 }
 
-export async function setPlanned(day: string, slot: MealSlot, recipeId: string): Promise<void> {
+export async function addPlanned(day: string, slot: MealSlot, recipeId: string): Promise<void> {
   await runDb((db) =>
-    db.runAsync('INSERT OR REPLACE INTO meal_plan (day, slot, recipeId) VALUES (?, ?, ?)', day, slot, recipeId),
+    db.runAsync(
+      `INSERT OR IGNORE INTO meal_plan_items (day, slot, recipeId, position)
+       VALUES (?, ?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM meal_plan_items WHERE day = ? AND slot = ?))`,
+      day,
+      slot,
+      recipeId,
+      day,
+      slot,
+    ),
   );
 }
 
-export async function clearPlanned(day: string, slot: MealSlot): Promise<void> {
-  await runDb((db) => db.runAsync('DELETE FROM meal_plan WHERE day = ? AND slot = ?', day, slot));
+export async function removePlanned(day: string, slot: MealSlot, recipeId: string): Promise<void> {
+  await runDb((db) => db.runAsync('DELETE FROM meal_plan_items WHERE day = ? AND slot = ? AND recipeId = ?', day, slot, recipeId));
+}
+
+/** Group rows into `day|slot` → recipe ids. */
+export function groupPlan(rows: PlannedMeal[]): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const r of rows) (out[`${r.day}|${r.slot}`] ??= []).push(r.recipeId);
+  return out;
 }

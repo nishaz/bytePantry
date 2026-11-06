@@ -26,32 +26,47 @@ export type DishKind =
   | 'roast'
   | 'steak'
   | 'dumplings'
-  | 'loaf';
+  | 'loaf'
+  | 'crepe'
+  | 'rolls'
+  | 'pudding'
+  | 'muffin'
+  | 'skewers'
+  | 'wrap';
 
 /** Order matters: the most specific dish wins ("pumpkin bread baked oats" is oats, not bread). */
 export const RULES: [RegExp, DishKind][] = [
-  [/overnight oats|baked oats|oatmeal|porridge|granola|\boats\b/, 'oats'],
-  [/pancake|crepe|waffle|hotcake/, 'pancakes'],
-  [/ramen|pho|udon|noodle soup|laksa/, 'ramen'],
-  [/sushi|maki|onigiri|hand ?roll/, 'sushi'],
-  [/dumpling|gyoza|wonton|dim sum|bao|momo|pierogi/, 'dumplings'],
+  // Jars and cups first: "chia pudding", "overnight oats", "yogurt parfait".
+  [/chia|pudding|parfait|overnight oats|mousse|panna cotta|trifle|yogurt pot|posset/, 'pudding'],
+  // A bread or loaf wins over "baked oats": "Pumpkin Bread Baked Oats" is baked in a loaf pan.
+  [/\b(bread|loaf|focaccia|brioche)\b/, 'loaf'],
+  [/baked oats|oatmeal|porridge|granola|\boats?\b/, 'oats'],
+  [/cr[eê]pe|galette|blintz/, 'crepe'],
+  [/pancake|waffle|hotcake|flapjack/, 'pancakes'],
+  [/ramen|pho\b|udon|noodle soup|laksa/, 'ramen'],
+  [/sushi|maki|onigiri|hand ?roll|temaki/, 'sushi'],
+  [/dumpling|gyoza|wonton|dim sum|\bbao\b|momo|pierogi/, 'dumplings'],
+  [/\brolls?\b|roll[- ]?ups?|rollatini|involtini|cannelloni|enchilada|spring roll|pinwheel/, 'rolls'],
+  [/skewer|kebab|kabob|satay|souvlaki|yakitori/, 'skewers'],
+  [/\bwraps?\b|burrito|shawarma|gyros?\b/, 'wrap'],
   [/pizza|flatbread|calzone/, 'pizza'],
   [/burger|slider/, 'burger'],
-  [/taco|burrito|quesadilla|fajita|nacho|enchilada/, 'taco'],
+  [/taco|quesadilla|fajita|nacho/, 'taco'],
   [/stir[ -]?fry|lo mein|chow mein|pad thai|teriyaki|kung pao|fried noodle/, 'stirfry'],
   [/curry|masala|korma|vindaloo|tikka|dal\b|dahl/, 'curry'],
   [/fried rice|risotto|paella|biryani|congee/, 'rice'],
   [/omelet|frittata|scrambl|egg|shakshuka/, 'omelette'],
   [/steak|ribeye|sirloin|chop\b|pork chop|lamb chop/, 'steak'],
   [/roast|rotisserie|whole chicken|drumstick|wings|turkey/, 'roast'],
-  [/pasta|spaghetti|noodle|penne|mac|lasagn|linguine|carbonara|gnocchi/, 'pasta'],
+  [/pasta|spaghetti|noodle|penne|\bmac\b|lasagn|linguine|carbonara|gnocchi/, 'pasta'],
   [/soup|stew|broth|chowder|chili|bisque/, 'soup'],
   [/salad|slaw|bowl of greens/, 'salad'],
-  [/rice|risotto|paella|biryani|poke/, 'rice'],
-  [/sandwich|toast|wrap|bagel|panini/, 'sandwich'],
+  [/rice|poke/, 'rice'],
+  [/sandwich|toast|bagel|panini/, 'sandwich'],
+  [/muffin|cupcake|scone/, 'muffin'],
   [/cookie|biscuit|brownie|blondie/, 'cookies'],
-  [/cake|cupcake|cheesecake/, 'cake'],
-  [/bread|loaf|banana bread|focaccia|bun|muffin/, 'loaf'],
+  [/cake|cheesecake/, 'cake'],
+  [/\bbun\b|banana bread/, 'loaf'],
   [/pie|tart|crumble|cobbler|quiche|bake/, 'pie'],
   [/smoothie|shake|juice|latte|drink|lemonade|tea\b|coffee/, 'smoothie'],
 ];
@@ -72,7 +87,16 @@ export function dishColor(kind: DishKind): string {
     case 'pancakes':
     case 'curry':
     case 'loaf':
+    case 'crepe':
+    case 'muffin':
       return p.yellow;
+    case 'rolls':
+    case 'skewers':
+      return p.orange;
+    case 'pudding':
+      return p.purple;
+    case 'wrap':
+      return p.green;
     case 'soup':
     case 'smoothie':
     case 'pizza':
@@ -377,6 +401,98 @@ function Body({ kind }: { kind: DishKind }) {
           <Path d="M14 50V34c0-14 52-14 52 0v16z" fill="#C88A4E" />
           <Path d="M14 34c0-14 52-14 52 0" stroke={p.brown} strokeWidth={3} fill="none" />
           <Path d="M26 28l6-6M38 26l6-6M50 28l6-6" stroke={p.cream} strokeWidth={3} strokeLinecap="round" />
+        </>
+      );
+    case 'crepe':
+      return (
+        <>
+          <Ellipse cx="40" cy="54" rx="34" ry="8" fill={p.card} />
+          <Path d="M10 50C14 30 40 20 70 30 64 44 44 54 10 50z" fill="#F2D488" />
+          <Path d="M10 50C22 40 44 34 70 30" stroke={p.brown} strokeWidth={2} fill="none" opacity={0.5} />
+          <Path d="M18 46c10-4 24-8 40-12" stroke="#C99561" strokeWidth={1.4} fill="none" opacity={0.5} />
+          <Circle cx="34" cy="30" r="5" fill={p.red} />
+          <Circle cx="44" cy="27" r="4.5" fill="#4B5BA8" />
+          <Circle cx="52" cy="30" r="4" fill={p.red} />
+          <Path d="M28 34c6-2 20-6 30-6" stroke={p.cream} strokeWidth={4} strokeLinecap="round" />
+          <Path d="M38 22c3-4 8-3 8 0-3 2-6 2-8 0z" fill={p.green} />
+        </>
+      );
+    case 'rolls':
+      return (
+        <>
+          <Rect x="6" y="28" width="68" height="30" rx="6" fill={p.card} stroke={p.ink} strokeWidth={1.6} />
+          <Rect x="10" y="32" width="60" height="22" rx="4" fill={p.red} />
+          {[20, 34, 48, 62].map((x) => (
+            <G key={x}>
+              <Ellipse cx={x} cy="40" rx="8" ry="9" fill={p.purple} />
+              <Ellipse cx={x} cy="40" rx="5" ry="6" fill={p.cream} />
+              <Path d={`M${x - 3} 40c2-3 4 3 6 0`} stroke={p.purple} strokeWidth={1.4} fill="none" />
+            </G>
+          ))}
+          <Path d="M14 30c4-3 8 1 6 4M44 28c4-3 8 1 6 4" stroke={p.green} strokeWidth={3} fill="none" strokeLinecap="round" />
+          <Circle cx="30" cy="50" r="2" fill={p.cream} />
+          <Circle cx="56" cy="51" r="2" fill={p.cream} />
+        </>
+      );
+    case 'pudding':
+      return (
+        <>
+          <Ellipse cx="40" cy="62" rx="22" ry="4" fill={p.shadow} />
+          <Path d="M22 18h36v38a6 6 0 0 1-6 6H28a6 6 0 0 1-6-6z" fill={p.card} stroke={p.ink} strokeWidth={1.8} />
+          <Path d="M24 44h32v12a4 4 0 0 1-4 4H28a4 4 0 0 1-4-4z" fill="#E9E1D0" />
+          {[[30, 50], [38, 54], [46, 49], [50, 56], [34, 57], [42, 46]].map(([x, y]) => (
+            <Circle key={`${x}-${y}`} cx={x} cy={y} r="1.3" fill={p.ink} />
+          ))}
+          <Rect x="24" y="34" width="32" height="10" fill={p.purple} opacity={0.75} />
+          <Rect x="24" y="26" width="32" height="8" fill={p.cream} />
+          <Circle cx="32" cy="22" r="4.5" fill="#4B5BA8" />
+          <Circle cx="42" cy="21" r="4.5" fill={p.red} />
+          <Path d="M46 20c3-5 9-4 9 0-3 2-6 2-9 0z" fill={p.green} />
+          <Rect x="20" y="14" width="40" height="5" rx="2" fill={p.kraftDeep} />
+        </>
+      );
+    case 'muffin':
+      return (
+        <>
+          <Ellipse cx="40" cy="62" rx="26" ry="4" fill={p.shadow} />
+          <Path d="M20 36h40l-5 24H25z" fill={p.red} />
+          <Path d="M26 36l2 24M34 36l1 24M46 36l-1 24M54 36l-2 24" stroke={p.redDeep} strokeWidth={1.5} />
+          <Path d="M16 38c-2-14 10-24 24-24s26 10 24 24c-6 3-42 3-48 0z" fill="#C88A4E" />
+          <Circle cx="30" cy="26" r="2.5" fill={p.panIn} />
+          <Circle cx="44" cy="22" r="2.5" fill={p.panIn} />
+          <Circle cx="50" cy="31" r="2.5" fill={p.panIn} />
+          <Circle cx="36" cy="33" r="2.5" fill={p.panIn} />
+          <Path d="M26 20c4-4 10-5 14-4" stroke={p.cream} strokeWidth={2.5} fill="none" strokeLinecap="round" opacity={0.6} />
+        </>
+      );
+    case 'skewers':
+      return (
+        <>
+          <Ellipse cx="40" cy="56" rx="36" ry="9" fill={p.card} />
+          {[0, 1].map((n) => {
+            const y = 30 + n * 14;
+            return (
+              <G key={n}>
+                <Path d={`M4 ${y + 4}L76 ${y - 4}`} stroke={p.brown} strokeWidth={2.5} strokeLinecap="round" />
+                <Rect x="14" y={y - 5} width="10" height="10" rx="2" fill={p.brown} transform={`rotate(-6 19 ${y})`} />
+                <Rect x="27" y={y - 6} width="9" height="10" rx="2" fill={p.red} transform={`rotate(-6 31 ${y})`} />
+                <Rect x="39" y={y - 7} width="10" height="10" rx="2" fill="#B5575B" transform={`rotate(-6 44 ${y - 1})`} />
+                <Rect x="52" y={y - 8} width="9" height="10" rx="2" fill={p.green} transform={`rotate(-6 56 ${y - 2})`} />
+              </G>
+            );
+          })}
+        </>
+      );
+    case 'wrap':
+      return (
+        <>
+          <Ellipse cx="40" cy="58" rx="32" ry="7" fill={p.card} />
+          <Path d="M14 54L30 18c8-6 20-6 30 0l6 36z" fill="#EAD39C" />
+          <Path d="M30 18c8-6 20-6 30 0-8 6-22 6-30 0z" fill={p.green} />
+          <Circle cx="38" cy="18" r="3.5" fill={p.red} />
+          <Circle cx="50" cy="17" r="3" fill={p.yellow} />
+          <Path d="M24 40c10 2 24 2 38 0M20 48c12 2 30 2 44 0" stroke={p.brown} strokeWidth={1.6} fill="none" opacity={0.5} />
+          <Rect x="16" y="44" width="52" height="12" rx="3" fill={p.blue} opacity={0.85} transform="rotate(-4 42 50)" />
         </>
       );
     default:
